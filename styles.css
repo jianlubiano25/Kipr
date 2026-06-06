@@ -56,10 +56,13 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:20px;heigh
   border-top:1px solid rgba(0,0,0,.08);
   width:100%;z-index:30;
   padding-bottom:max(env(safe-area-inset-bottom,0px),0px);
-  flex-shrink:0;
+  height:calc(58px + max(env(safe-area-inset-bottom,0px),0px));
+  min-height:calc(58px + max(env(safe-area-inset-bottom,0px),0px));
+  max-height:calc(58px + max(env(safe-area-inset-bottom,0px),0px));
+  flex:0 0 auto;
   box-shadow:0 -2px 12px rgba(0,0,0,.06);
 }
-.tb{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:7px 1px 5px;background:none;border:none;border-top:2.5px solid transparent;cursor:pointer;color:#9a8272;gap:2px;transition:color .15s,border-color .15s}
+.tb{flex:1 1 0;display:flex;flex-direction:column;align-items:center;justify-content:center;height:58px;padding:7px 1px 5px;background:none;border:none;border-top:2.5px solid transparent;cursor:pointer;color:#9a8272;gap:2px;transition:color .15s,border-color .15s}
 .tb-on{border-top-color:#1b4d35;color:#1b4d35}
 .tb-ic{font-size:19px;line-height:1}
 .tb-lb{font-size:9px;font-weight:500;letter-spacing:.1px}
