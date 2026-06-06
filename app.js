@@ -2,7 +2,9 @@
 const SK='ipon-v5', GK='ipon-gkey', SCHEMA_VERSION=2;
 const SUPABASE_URL='https://yzygamcsltydsqsyzqbj.supabase.co';
 const SUPABASE_KEY='sb_publishable_eWEeUsDYUsRGDX5sd7U91Q_sQMUVMUE';
-const SYNC_TABLE='budget_data';
+const LIVE_SYNC_TABLE='budget_records';
+const LIVE_COLLECTIONS=['transactions','homeExpenses','priceItems','stocks','bills','airconUsage','tvUsage','appliances','applianceUsage','activeSessions'];
+const LIVE_PENDING_KEY=SK+'-pending-v1';
 const MODELS=['gemini-2.5-flash-lite','gemini-2.5-flash','gemini-2.0-flash-lite','gemini-2.0-flash','gemini-1.5-flash-8b','gemini-1.5-flash'];
 const SCAN_PROMPT=`Analyze this image from the Philippines. It may be a receipt, order-details screenshot, price tag, shelf label, palengke sign, or menu.
 
@@ -92,7 +94,10 @@ function cycleLabel(c){
   const optsStart={month:'short',day:'numeric',...(sameYear?{}:{year:'numeric'})};
   return `${c.start.toLocaleDateString('en-PH',optsStart)}-${c.end.toLocaleDateString('en-PH',{month:'short',day:'numeric',year:'numeric'})}`;
 }
-function inCycle(item,cycle){const dt=dtOf(item.date);return dt>=cycle.start&&dt<=cycle.end;}
+function inCycle(item,cycle){
+  const s=dtOf(item.startDate||item.date),e=dtOf(item.endDate||item.date);
+  return e>=cycle.start&&s<=cycle.end;
+}
 function cycleDays(c){return Math.round((c.end-c.start)/86400000)+1;}
 function time12Parts(t){
   const m=minsOfDay(t);if(isNaN(m))return{h:'12',mi:'00',ap:'AM'};
@@ -108,7 +113,8 @@ function minsOfDay(t){const m=String(t||'').match(/^(\d{1,2}):(\d{2})$/);if(!m)r
 function timePlus(t,minutes){const sm=minsOfDay(t);if(isNaN(sm))return '';const m=((sm+Math.round(minutes))%1440+1440)%1440;return `${pad2(Math.floor(m/60))}:${pad2(m%60)}`;}
 function minutesBetween(start,end){const sm=minsOfDay(start),em=minsOfDay(end);if(isNaN(sm)||isNaN(em))return 0;let mins=em-sm;if(mins<=0)mins+=1440;return mins;}
 function durationLabel(minutes){
-  const mins=Math.max(0,Math.round(parseFloat(minutes)||0)),h=Math.floor(mins/60),m=mins%60;
+  const mins=Math.max(0,Math.round(parseFloat(minutes)||0)),d=Math.floor(mins/1440),h=Math.floor((mins%1440)/60),m=mins%60;
+  if(d)return `${d}d${h?` ${h}h`:''}${m?` ${m}m`:''}`;
   if(h&&m)return `${h}h ${m}m`;
   if(h)return `${h}h`;
   return `${m}m`;
@@ -217,6 +223,10 @@ function auditDateTime(date,time,endOfDay=false){
   return isNaN(dt)?null:dt;
 }
 function usageDateRange(u,start,end){
+  if(u.startDate||u.endDate){
+    const s=auditDateTime(u.startDate||u.date,u.start||'00:00'),e=auditDateTime(u.endDate||u.date,u.end||'23:59');
+    return s&&e?{s,e:e<=s?new Date(e.getTime()+86400000):e,exact:true}:null;
+  }
   const hasTime=u.start&&u.end;
   if(hasTime){
     const s=auditDateTime(u.date,u.start),e=auditDateTime(u.date,u.end);
@@ -228,6 +238,14 @@ function usageDateRange(u,start,end){
   return s&&e?{s,e,exact:false}:null;
 }
 function overlapsRange(s,e,start,end){return s<end&&e>start;}
+function overlapRatio(u,start,end){
+  const r=usageDateRange(u,start,end);
+  if(!r)return 0;
+  const total=Math.max(1,r.e-r.s),overlap=Math.max(0,Math.min(r.e,end)-Math.max(r.s,start));
+  return overlap/total;
+}
+function usageCostInRange(u,start,end){return (parseFloat(u.cost)||0)*overlapRatio(u,start,end);}
+function usageKwhInRange(u,start,end){return (parseFloat(u.kwh)||0)*overlapRatio(u,start,end);}
 function meterAudit(data=S?.data,f=S?.auditF){
   const start=auditDateTime(f?.startDate,f?.startTime),end=auditDateTime(f?.endDate,f?.endTime);
   const startRead=parseFloat(f?.startRead),endRead=parseFloat(f?.endRead),rate=parseFloat(data?.meralcoRate)||14.3345;
@@ -239,7 +257,7 @@ function meterAudit(data=S?.data,f=S?.auditF){
   const tv=(data?.tvUsage||[]).filter(include);
   const appliances=(data?.applianceUsage||[]).filter(include);
   const sum=rows=>rows.reduce((s,u)=>s+(parseFloat(u.kwh)||0),0);
-  const airconKwh=sum(aircon),tvKwh=sum(tv),sessionKwh=sum(appliances);
+  const airconKwh=sum(aircon),tvKwh=sum(tv),sessionKwh=appliances.reduce((s,u)=>s+usageKwhInRange(u,start,end),0);
   const alwaysRows=(data?.appliances||[]).filter(a=>a.alwaysOn).map(a=>{
     const est=applianceAlwaysOnEstimate(a,start,end,rate);
     return{...a,...est};
@@ -295,7 +313,7 @@ function electricityCycleEstimate(cycle,data=S?.data){
   const cr=cycleDateRange(cycle);
   const airconKwh=aircon.reduce((s,u)=>s+(parseFloat(u.kwh)||0),0);
   const tvKwh=tv.reduce((s,u)=>s+(parseFloat(u.kwh)||0),0);
-  const sessionKwh=applianceSessions.reduce((s,u)=>s+(parseFloat(u.kwh)||0),0);
+  const sessionKwh=applianceSessions.reduce((s,u)=>s+usageKwhInRange(u,cr.start,cr.end),0);
   const alwaysKwh=(data?.appliances||[]).filter(a=>a.alwaysOn).reduce((s,a)=>s+applianceAlwaysOnEstimate(a,cr.start,cr.end,data?.meralcoRate||14.3345).kwh,0);
   const totalKwh=airconKwh+tvKwh+sessionKwh+alwaysKwh;
   return{airconKwh,tvKwh,sessionKwh,alwaysKwh,totalKwh,logs:aircon.length+tv.length+applianceSessions.length};
@@ -311,14 +329,15 @@ function electricityDailyChart(cycle,data=S?.data,range='cycle'){
     for(let dd=new Date(cycle.start);dd<=cycle.end;dd.setDate(dd.getDate()+1))days.push(new Date(dd));
   }
   return days.map(dd=>{
-    const ds=dateOf(dd),air=usage.filter(u=>u.date===ds),tv=tvUsage.filter(u=>u.date===ds),ap=applianceUsage.filter(u=>u.date===ds);
+    const ds=dateOf(dd),air=usage.filter(u=>u.date===ds),tv=tvUsage.filter(u=>u.date===ds);
     const dayStart=new Date(`${ds}T00:00:00`),dayEnd=new Date(dayStart);dayEnd.setDate(dayEnd.getDate()+1);
+    const ap=applianceUsage.filter(u=>overlapRatio(u,dayStart,dayEnd)>0);
     const alwaysEst=alwaysOn.reduce((s,a)=>{
       const est=applianceAlwaysOnEstimate(a,dayStart,dayEnd,data?.meralcoRate||14.3345);
       return{cost:s.cost+est.cost,kwh:s.kwh+est.kwh};
     },{cost:0,kwh:0});
-    const airCost=air.reduce((s,u)=>s+u.cost,0),tvCost=tv.reduce((s,u)=>s+u.cost,0),apCost=ap.reduce((s,u)=>s+u.cost,0);
-    const airKwh=air.reduce((s,u)=>s+u.kwh,0),tvKwh=tv.reduce((s,u)=>s+u.kwh,0),apKwh=ap.reduce((s,u)=>s+u.kwh,0);
+    const airCost=air.reduce((s,u)=>s+u.cost,0),tvCost=tv.reduce((s,u)=>s+u.cost,0),apCost=ap.reduce((s,u)=>s+usageCostInRange(u,dayStart,dayEnd),0);
+    const airKwh=air.reduce((s,u)=>s+u.kwh,0),tvKwh=tv.reduce((s,u)=>s+u.kwh,0),apKwh=ap.reduce((s,u)=>s+usageKwhInRange(u,dayStart,dayEnd),0);
     const estKwh=airKwh+tvKwh+apKwh+alwaysEst.kwh;
     return{label:range==='7'?chartLbl(dd):String(dd.getDate()),ds,cost:airCost+tvCost+apCost+alwaysEst.cost,kwh:meralcoDailyKwh||estKwh,estimatedKwh:estKwh,meralcoDailyKwh,airCost,tvCost,applianceCost:apCost+alwaysEst.cost,airKwh,tvKwh,applianceKwh:apKwh+alwaysEst.kwh};
   });
@@ -348,12 +367,12 @@ function electricityReportForMonth(monthKey=curMk(),data=S?.data){
   });
   const airconKwh=aircon.reduce((s,u)=>s+(parseFloat(u.kwh)||0),0),airconCost=aircon.reduce((s,u)=>s+(parseFloat(u.cost)||0),0),airconHours=aircon.reduce((s,u)=>s+(parseFloat(u.hours)||parseFloat(u.minutes)/60||0),0);
   const tvKwh=tv.reduce((s,u)=>s+(parseFloat(u.kwh)||0),0),tvCost=tv.reduce((s,u)=>s+(parseFloat(u.cost)||0),0),tvHours=tv.reduce((s,u)=>s+(parseFloat(u.hours)||parseFloat(u.minutes)/60||0),0);
-  const sessionKwh=sessions.reduce((s,u)=>s+(parseFloat(u.kwh)||0),0),sessionCost=sessions.reduce((s,u)=>s+(parseFloat(u.cost)||0),0),sessionHours=sessions.reduce((s,u)=>s+(parseFloat(u.hours)||parseFloat(u.minutes)/60||0),0);
+  const sessionKwh=sessions.reduce((s,u)=>s+usageKwhInRange(u,cr.start,cr.end),0),sessionCost=sessions.reduce((s,u)=>s+usageCostInRange(u,cr.start,cr.end),0),sessionHours=sessions.reduce((s,u)=>s+(parseFloat(u.hours)||parseFloat(u.minutes)/60||0)*overlapRatio(u,cr.start,cr.end),0);
   const alwaysKwh=always.reduce((s,u)=>s+u.kwh,0),alwaysCost=always.reduce((s,u)=>s+u.cost,0);
   const applianceGroups=new Map();
   sessions.forEach(u=>{
     const key=u.name||'Appliance',g=applianceGroups.get(key)||{name:key,category:u.category||'Appliance',kwh:0,cost:0,hours:0,logs:0,type:'Appliance'};
-    g.kwh+=parseFloat(u.kwh)||0;g.cost+=parseFloat(u.cost)||0;g.hours+=parseFloat(u.hours)||parseFloat(u.minutes)/60||0;g.logs+=1;applianceGroups.set(key,g);
+    g.kwh+=usageKwhInRange(u,cr.start,cr.end);g.cost+=usageCostInRange(u,cr.start,cr.end);g.hours+=(parseFloat(u.hours)||parseFloat(u.minutes)/60||0)*overlapRatio(u,cr.start,cr.end);g.logs+=1;applianceGroups.set(key,g);
   });
   const top=[
     ...(airconKwh?[{name:'Aircon',category:'Cooling',kwh:airconKwh,cost:airconCost,hours:airconHours,logs:aircon.length,type:'Aircon'}]:[]),
@@ -364,8 +383,8 @@ function electricityReportForMonth(monthKey=curMk(),data=S?.data){
   const logs=[
     ...aircon.map(u=>({type:'Aircon',name:`${airconModeLabel(u.mode,u.sleepMode)} · ${durationLabel(u.minutes||(u.hours||0)*60)}`,date:u.date,time:u.start&&u.end?`${fmtTime12(u.start)}-${fmtTime12(u.end)}`:'',kwh:u.kwh,cost:u.cost})),
     ...tv.map(u=>({type:'TV',name:durationLabel(u.minutes||(u.hours||0)*60),date:u.date,time:u.start&&u.end?`${fmtTime12(u.start)}-${fmtTime12(u.end)}`:'',kwh:u.kwh,cost:u.cost})),
-    ...sessions.map(u=>({type:'Appliance',name:`${u.name} · ${durationLabel(u.minutes)}`,date:u.date,time:u.start&&u.end?`${fmtTime12(u.start)}-${fmtTime12(u.end)}`:'',kwh:u.kwh,cost:u.cost}))
-  ].sort((a,b)=>b.date.localeCompare(a.date)||String(b.time).localeCompare(String(a.time)));
+    ...sessions.map(u=>({type:'Appliance',name:`${u.name} · ${durationLabel(u.minutes)}`,date:u.date,sortDate:logSortDate(u),time:u.start&&u.end?`${fmtTime12(u.start)}-${fmtTime12(u.end)}`:'',kwh:u.kwh,cost:u.cost}))
+  ].sort((a,b)=>String(b.sortDate||b.date).localeCompare(String(a.sortDate||a.date))||String(b.time).localeCompare(String(a.time)));
   const totalKwh=airconKwh+tvKwh+sessionKwh+alwaysKwh,totalCost=airconCost+tvCost+sessionCost+alwaysCost;
   return{monthKey,cycle,days:cycleDayCount,aircon,tv,sessions,always,logs,top,airconKwh,airconCost,airconHours,tvKwh,tvCost,tvHours,sessionKwh,sessionCost,sessionHours,alwaysKwh,alwaysCost,totalKwh,totalCost,rate};
 }
@@ -444,14 +463,67 @@ const homeCategories=(data=S?.data)=>labelList('homeCategories',data);
 const homeStores=(data=S?.data)=>labelList('homeStores',data);
 const applianceCategories=(data=S?.data)=>labelList('applianceCategories',data);
 const parseLabels=v=>[...new Set(String(v||'').split('\n').map(x=>x.trim()).filter(Boolean))];
-const INIT={schemaVersion:SCHEMA_VERSION,balance:130000,transactions:[],homeExpenses:[],priceItems:[],stocks:[],bills:[{id:'b1',name:'Electricity',monthlyAmounts:{},monthlyKwh:{},paid:{}},{id:'b2',name:'WiFi / Internet',monthlyAmounts:{},paid:{}}],dailyBudget:380,groceryBudget:5000,
-  airconUsage:[],tvUsage:[],meralcoRate:14.3345,airconStartupKwh:1.2,airconRunningKwh:0.6,
+const INIT={schemaVersion:SCHEMA_VERSION,balance:130000,balanceBase:130000,transactions:[],homeExpenses:[],priceItems:[],stocks:[],bills:[{id:'b1',name:'Electricity',monthlyAmounts:{},monthlyKwh:{},paid:{}},{id:'b2',name:'WiFi / Internet',monthlyAmounts:{},paid:{}}],dailyBudget:380,groceryBudget:5000,
+  airconUsage:[],tvUsage:[],meralcoRate:14.3345,
   airconStartupRate:1.20,airconSleepDayRate:0.62,airconSleepNightRate:0.48,airconEcoDayRate:0.55,airconEcoNightRate:0.42,airconDayRate:0.85,airconNightRate:0.58,airconDefaultSleepMode:true,airconDefaultMode:'sleep',airconDefaultTemp:'29',
   airconModel:AIRCON_MODEL_PROFILE.model,airconTempBaseline:29,airconTempStepPct:7,airconOutdoorBaseline:30,airconOutdoorStepPct:2.5,
   airconOutdoorModel:AIRCON_MODEL_PROFILE.outdoorModel,airconCoolingKw:AIRCON_MODEL_PROFILE.coolingKw,airconRatedWatts:AIRCON_MODEL_PROFILE.ratedWatts,airconMinWatts:AIRCON_MODEL_PROFILE.minWatts,airconMaxWatts:AIRCON_MODEL_PROFILE.maxWatts,airconCspf:AIRCON_MODEL_PROFILE.cspf,airconDoeMonthlyKwh:AIRCON_MODEL_PROFILE.doeMonthlyKwh,
   weatherProvider:DEFAULT_WEATHER.provider,weatherLabel:DEFAULT_WEATHER.label,weatherLat:DEFAULT_WEATHER.lat,weatherLon:DEFAULT_WEATHER.lon,weatherElevation:DEFAULT_WEATHER.elevation,weatherApiKey:'',weather:null,
   labels:LABEL_DEFAULTS,
   tvWatts:175,meralcoReadDay:12,appliances:DEFAULT_APPLIANCES,applianceUsage:[],activeSessions:[]};
+function expenseTotal(data){return [...(data?.transactions||[]),...(data?.homeExpenses||[])].reduce((s,x)=>s+(parseFloat(x.amount)||0),0);}
+function normalizeBalance(data){
+  if(data.balanceBase===undefined||data.balanceBase===null)data.balanceBase=(parseFloat(data.balance)||0)+expenseTotal(data);
+  data.balance=(parseFloat(data.balanceBase)||0)-expenseTotal(data);
+  return data;
+}
+function isDaily24hApplianceLog(u){
+  const mins=parseFloat(u?.minutes)||((parseFloat(u?.hours)||0)*60);
+  return !u?.span&&mins>=1435&&mins<=1445&&u?.date;
+}
+function mergeDaily24hApplianceLogs(data){
+  const logs=data.applianceUsage||[],targets=logs.filter(isDaily24hApplianceLog);
+  if(targets.length<2)return data;
+  const targetIds=new Set(targets.map(u=>u.id));
+  const deletedIds=[];
+  const groups=new Map();
+  targets.forEach(u=>{
+    const key=[u.applianceId||u.name,u.name,u.category||'',u.watts||'',u.qty||'',u.rateAtTime||''].join('|');
+    if(!groups.has(key))groups.set(key,[]);
+    groups.get(key).push(u);
+  });
+  const merged=[];
+  groups.forEach(items=>{
+    items.sort((a,b)=>a.date.localeCompare(b.date));
+    let batch=[];
+    const flush=()=>{
+      if(!batch.length)return;
+      if(batch.length===1){merged.push(batch[0]);batch=[];return;}
+      const first=batch[0],last=batch[batch.length-1],end=new Date(`${last.date}T00:00:00`);
+      end.setDate(end.getDate()+1);
+      const minutes=batch.reduce((s,u)=>s+(parseFloat(u.minutes)||1440),0);
+      const kwh=batch.reduce((s,u)=>s+(parseFloat(u.kwh)||0),0);
+      const cost=batch.reduce((s,u)=>s+(parseFloat(u.cost)||0),0);
+      merged.push({...first,date:first.date,startDate:first.date,endDate:dateOf(end),start:first.start||'00:00',end:last.end||'00:00',minutes,hours:minutes/60,kwh,cost,span:true,note:noteParts(first.note,'Merged 24/7 daily logs')});
+      deletedIds.push(...batch.slice(1).map(u=>u.id).filter(Boolean));
+      batch=[];
+    };
+    items.forEach(u=>{
+      if(!batch.length){batch=[u];return;}
+      const prev=batch[batch.length-1],expected=new Date(`${prev.date}T00:00:00`);
+      expected.setDate(expected.getDate()+1);
+      if(dateOf(expected)===u.date)batch.push(u);
+      else{flush();batch=[u];}
+    });
+    flush();
+  });
+  if(!deletedIds.length)return data;
+  data.applianceUsage=[...merged,...logs.filter(u=>!targetIds.has(u.id))].sort((a,b)=>String(logSortDate(b)).localeCompare(String(logSortDate(a))));
+  data.modifiedAt=new Date().toISOString();
+  data.mergedDaily24hAt=data.modifiedAt;
+  data._mergedDaily24hDeletedIds=[...(data._mergedDaily24hDeletedIds||[]),...deletedIds];
+  return data;
+}
 function ld(){try{const s=localStorage.getItem(SK);if(s){const d=JSON.parse(s);if(!d.stocks)d.stocks=[];if(!d.homeExpenses)d.homeExpenses=[];
   d.schemaVersion=SCHEMA_VERSION;
   if(!d.groceryBudget)d.groceryBudget=5000;
@@ -475,7 +547,7 @@ function ld(){try{const s=localStorage.getItem(SK);if(s){const d=JSON.parse(s);i
     return{...a,qty:parseFloat(a.qty)||1,sessionMinutes:a.alwaysOn?0:(isDefaultKettle&&(!rawMins||rawMins===7)?3:(rawMins||Math.max(1,Math.round((parseFloat(a.hoursPerDay)||1)*60))))};
   });
   if(!d.airTimer)d.airTimer=null;
-  if(!d.airconStartupKwh)d.airconStartupKwh=1.2;if(!d.airconRunningKwh)d.airconRunningKwh=0.6;if(!d.tvWatts||d.tvWatts===100)d.tvWatts=175;
+  delete d.airconStartupKwh;delete d.airconRunningKwh;if(!d.tvWatts||d.tvWatts===100)d.tvWatts=175;
   if(!d.airconStartupRate||d.airconStartupRate===0.75)d.airconStartupRate=DEFAULT_AIRCON_RATES.startup;
   if(!d.airconSleepDayRate||d.airconSleepDayRate===0.30||d.airconSleepDayRate===0.60)d.airconSleepDayRate=DEFAULT_AIRCON_RATES.sleepDay;
   if(!d.airconSleepNightRate||d.airconSleepNightRate===0.22||d.airconSleepNightRate===0.42)d.airconSleepNightRate=DEFAULT_AIRCON_RATES.sleepNight;
@@ -487,24 +559,94 @@ function ld(){try{const s=localStorage.getItem(SK);if(s){const d=JSON.parse(s);i
   if(!d.airconOutdoorModel)d.airconOutdoorModel=AIRCON_MODEL_PROFILE.outdoorModel;if(!d.airconCoolingKw)d.airconCoolingKw=AIRCON_MODEL_PROFILE.coolingKw;if(!d.airconRatedWatts)d.airconRatedWatts=AIRCON_MODEL_PROFILE.ratedWatts;if(!d.airconMinWatts)d.airconMinWatts=AIRCON_MODEL_PROFILE.minWatts;if(!d.airconMaxWatts)d.airconMaxWatts=AIRCON_MODEL_PROFILE.maxWatts;if(!d.airconCspf)d.airconCspf=AIRCON_MODEL_PROFILE.cspf;if(!d.airconDoeMonthlyKwh)d.airconDoeMonthlyKwh=AIRCON_MODEL_PROFILE.doeMonthlyKwh;
   if(!d.weatherProvider)d.weatherProvider=DEFAULT_WEATHER.provider;if(!d.weatherLabel)d.weatherLabel=DEFAULT_WEATHER.label;if(!d.weatherLat)d.weatherLat=DEFAULT_WEATHER.lat;if(!d.weatherLon)d.weatherLon=DEFAULT_WEATHER.lon;if(!d.weatherElevation)d.weatherElevation=DEFAULT_WEATHER.elevation;
   if(d.airconDefaultSleepMode===undefined)d.airconDefaultSleepMode=true;if(!d.airconDefaultMode)d.airconDefaultMode=d.airconDefaultSleepMode===false?'normal':'sleep';if(d.airconDefaultTemp===undefined)d.airconDefaultTemp='29';
-  return d;}}catch{}return JSON.parse(JSON.stringify(INIT));}
+  const out=normalizeBalance(mergeDaily24hApplianceLogs(d));if(out._mergedDaily24hDeletedIds?.length)sd(out);return out;}}catch{}return JSON.parse(JSON.stringify(INIT));}
 function sd(d){try{localStorage.setItem(SK,JSON.stringify(d));}catch{}}
 function lk(){return localStorage.getItem(GK)||'';}
 function sk(k){k?localStorage.setItem(GK,k):localStorage.removeItem(GK);}
 const supa=window.supabase?.createClient?.(SUPABASE_URL,SUPABASE_KEY)||null;
 let cloudSaveTimer=null;
 let cloudLoadedFor='';
-function dataStamp(data){
-  const t=Date.parse(data?.modifiedAt||data?.syncedAt||'');
-  return isNaN(t)?0:t;
-}
+let liveChannel=null;
+let liveApplying=false;
 function touchData(data){
   return{...data,schemaVersion:SCHEMA_VERSION,modifiedAt:new Date().toISOString()};
+}
+function jclone(v){return JSON.parse(JSON.stringify(v));}
+function stableJson(v){return JSON.stringify(v??null);}
+function liveMetaFromData(data){
+  const meta={...data};
+  LIVE_COLLECTIONS.forEach(k=>delete meta[k]);
+  delete meta.balance;
+  delete meta._mergedDaily24hDeletedIds;
+  delete meta.schemaVersion;delete meta.syncedAt;
+  return meta;
+}
+function pendingRows(){try{return JSON.parse(localStorage.getItem(LIVE_PENDING_KEY)||'[]');}catch{return[];}}
+function savePendingRows(rows){try{rows.length?localStorage.setItem(LIVE_PENDING_KEY,JSON.stringify(rows)):localStorage.removeItem(LIVE_PENDING_KEY);}catch{}}
+function liveRow(collection,itemId,data,deleted=false,updatedAt=new Date().toISOString()){
+  return{user_id:S.user.id,collection,item_id:itemId,data:deleted?null:data,deleted,updated_at:updatedAt};
+}
+function rowsFromData(data,full=false,previous=null){
+  const now=new Date().toISOString(),rows=[];
+  const meta=liveMetaFromData(data),oldMeta=previous?liveMetaFromData(previous):null;
+  if(full||!previous||stableJson(meta)!==stableJson(oldMeta))rows.push(liveRow('meta','settings',meta,false,now));
+  LIVE_COLLECTIONS.forEach(collection=>{
+    const nextItems=data[collection]||[],oldItems=previous?.[collection]||[];
+    const oldById=new Map(oldItems.map(x=>[String(x.id),x]));
+    const nextById=new Map(nextItems.map(x=>[String(x.id),x]));
+    nextItems.forEach(item=>{
+      if(!item?.id)return;
+      const old=oldById.get(String(item.id));
+      if(full||!old||stableJson(item)!==stableJson(old))rows.push(liveRow(collection,String(item.id),item,false,now));
+    });
+    if(previous&&!full)oldItems.forEach(item=>{
+      if(item?.id&&!nextById.has(String(item.id)))rows.push(liveRow(collection,String(item.id),null,true,now));
+    });
+  });
+  if(Array.isArray(data._mergedDaily24hDeletedIds)){
+    const existing=new Set(rows.map(r=>r.collection+'|'+r.item_id));
+    data._mergedDaily24hDeletedIds.forEach(id=>{
+      const key='applianceUsage|'+id;
+      if(id&&!existing.has(key))rows.push(liveRow('applianceUsage',String(id),null,true,now));
+    });
+  }
+  return rows;
+}
+function applyLiveRows(base,rows){
+  let next={...jclone(INIT),...liveMetaFromData(base||{})};
+  const latest=new Map();
+  rows.forEach(r=>{
+    const key=r.collection+'|'+r.item_id,ts=Date.parse(r.updated_at||'')||0;
+    const old=latest.get(key),oldTs=Date.parse(old?.updated_at||'')||0;
+    if(!old||ts>=oldTs)latest.set(key,r);
+  });
+  const meta=latest.get('meta|settings');
+  if(meta&&!meta.deleted&&meta.data)next={...next,...meta.data};
+  LIVE_COLLECTIONS.forEach(k=>next[k]=[]);
+  latest.forEach(r=>{
+    if(r.collection==='meta'||r.deleted||!r.data||!LIVE_COLLECTIONS.includes(r.collection))return;
+    next[r.collection].push(r.data);
+  });
+  next.schemaVersion=SCHEMA_VERSION;
+  next.syncedAt=new Date().toISOString();
+  return ldNormalize(next);
+}
+function ldNormalize(d){
+  sd(d);
+  const out=ld();
+  sd(out);
+  return out;
+}
+function syncTimeLabel(value){
+  const t=Date.parse(value||'');
+  if(isNaN(t))return'Never';
+  return new Date(t).toLocaleString('en-PH',{month:'short',day:'numeric',year:'numeric',hour:'numeric',minute:'2-digit'});
 }
 function syncLabel(){
   if(!supa)return'Sync unavailable';
   if(S?.syncSaving)return'Syncing...';
   if(S?.syncErr)return'Sync error';
+  if(S?.user&&pendingRows().length)return`Signed in · ${pendingRows().length} pending sync`;
   if(S?.user)return`Signed in as ${S.user.email||'Apple/Google account'}`;
   return'Not signed in';
 }
@@ -517,21 +659,40 @@ async function cloudSignOut(){
   if(!supa)return;
   await supa.auth.signOut();
   cloudLoadedFor='';
+  if(liveChannel){supa.removeChannel(liveChannel);liveChannel=null;}
   set({user:null,syncErr:'',syncSaving:false});
 }
-function queueCloudSave(data=S.data){
+function queueCloudSave(data=S.data,previous=null){
   if(!supa||!S?.user)return;
   clearTimeout(cloudSaveTimer);
-  cloudSaveTimer=setTimeout(()=>cloudSave(data),700);
+  cloudSaveTimer=setTimeout(()=>cloudSave(data,previous),700);
 }
-async function cloudSave(data=S.data){
+async function upsertLiveRows(rows){
+  if(!rows.length)return{ok:true};
+  const pending=pendingRows();
+  if(pending.length){
+    rows=[...pending,...rows];
+    savePendingRows([]);
+  }
+  const {error}=await supa.from(LIVE_SYNC_TABLE).upsert(rows,{onConflict:'user_id,collection,item_id'});
+  if(error){
+    savePendingRows([...pendingRows(),...rows]);
+    return{ok:false,error};
+  }
+  return{ok:true};
+}
+async function cloudSave(data=S.data,previous=null){
   if(!supa||!S?.user)return;
   S.syncSaving=true;S.syncErr='';render();
-  const payload={...data,schemaVersion:SCHEMA_VERSION,modifiedAt:data.modifiedAt||new Date().toISOString(),syncedAt:new Date().toISOString()};
-  const {error}=await supa.from(SYNC_TABLE).upsert({user_id:S.user.id,data:payload,updated_at:new Date().toISOString()});
+  const rows=rowsFromData(data,!previous,previous);
+  const result=await upsertLiveRows(rows);
   S.syncSaving=false;
-  if(error)S.syncErr=error.message;
-  else{S.syncErr='';sd(payload);S.data=payload;}
+  if(!result.ok)S.syncErr=result.error?.message||'Sync queued until online';
+  else{
+    const payload={...data,schemaVersion:SCHEMA_VERSION,syncedAt:new Date().toISOString()};
+    delete payload._mergedDaily24hDeletedIds;
+    S.syncErr='';sd(payload);S.data=payload;
+  }
   render();
 }
 async function cloudLoad(){
@@ -539,21 +700,36 @@ async function cloudLoad(){
   if(cloudLoadedFor===S.user.id)return;
   cloudLoadedFor=S.user.id;
   S.syncSaving=true;S.syncErr='';render();
-  const {data,error}=await supa.from(SYNC_TABLE).select('data,updated_at').eq('user_id',S.user.id).maybeSingle();
+  const {data:rows,error}=await supa.from(LIVE_SYNC_TABLE).select('collection,item_id,data,deleted,updated_at').eq('user_id',S.user.id).order('updated_at',{ascending:false});
   S.syncSaving=false;
   if(error){cloudLoadedFor='';S.syncErr=error.message;render();return;}
-  const cloudData=data?.data;
-  if(cloudData){
-    const same=JSON.stringify(cloudData)===JSON.stringify(S.data);
-    if(same){render();return;}
-    const cloudTs=Math.max(dataStamp(cloudData),Date.parse(data.updated_at||'')||0);
-    const localTs=dataStamp(S.data);
-    if(!localTs||cloudTs>=localTs){sd(cloudData);S.data=ld();S.syncErr='';render();}
-    else queueCloudSave(S.data);
-  }else{
-    queueCloudSave(S.data);
+  if(rows?.length){
+    liveApplying=true;
+    S.data=applyLiveRows(S.data,rows);
+    sd(S.data);S.syncErr='';
+    liveApplying=false;
     render();
-  }
+    if(S.data._mergedDaily24hDeletedIds?.length)cloudSave(S.data);
+  }else await cloudSave(S.data);
+  startLiveSync();
+}
+function startLiveSync(){
+  if(!supa||!S?.user||liveChannel)return;
+  liveChannel=supa.channel('kipr-live-'+S.user.id)
+    .on('postgres_changes',{event:'*',schema:'public',table:LIVE_SYNC_TABLE,filter:`user_id=eq.${S.user.id}`},payload=>{
+      const row=payload.new||payload.old;if(!row||liveApplying)return;
+      const prev=S.data;
+      const allRows=rowsFromData(prev,true).map(r=>({collection:r.collection,item_id:r.item_id,data:r.data,deleted:r.deleted,updated_at:r.updated_at}));
+      const idx=allRows.findIndex(r=>r.collection===row.collection&&r.item_id===row.item_id);
+      const compact={collection:row.collection,item_id:row.item_id,data:row.data,deleted:row.deleted,updated_at:row.updated_at};
+      if(idx>=0)allRows[idx]=compact;else allRows.push(compact);
+      liveApplying=true;
+      S.data=applyLiveRows(prev,allRows);
+      sd(S.data);
+      liveApplying=false;
+      render();
+    })
+    .subscribe();
 }
 async function initCloud(){
   if(!supa)return;
@@ -562,8 +738,11 @@ async function initCloud(){
   supa.auth.onAuthStateChange((event,session)=>{
     const user=session?.user||null;
     S.user=user;S.syncErr='';S.syncSaving=false;render();
+    if(!user&&liveChannel){supa.removeChannel(liveChannel);liveChannel=null;cloudLoadedFor='';}
     if(user&&(event==='SIGNED_IN'||event==='TOKEN_REFRESHED'||event==='INITIAL_SESSION'))cloudLoad();
   });
+  window.addEventListener('online',()=>{if(S.user)cloudSave(S.data);});
+  document.addEventListener('visibilitychange',()=>{if(!document.hidden&&S.user){cloudLoadedFor='';cloudLoad();}});
 }
 
 // ─── STATE ───────────────────────────────────────────────────
@@ -604,7 +783,13 @@ let S={
 let openSw=null;
 let liveTick=null;
 function set(p){if(typeof p==='function')Object.assign(S,p(S));else Object.assign(S,p);render();}
-function setD(fn){const d=touchData(fn(S.data));sd(d);S.data=d;queueCloudSave(d);render();}
+function setD(fn){
+  const prev=S.data;
+  const d=touchData(normalizeBalance(fn(prev)));
+  sd(d);S.data=d;
+  if(!liveApplying)queueCloudSave(d,prev);
+  render();
+}
 
 function ensureLiveTick(){
   const hasActive=(S.data.activeSessions||[]).length>0;
@@ -732,17 +917,14 @@ function alwaysOnSinceLabel(ap,d=S.data){
   return `On since ${label}${ap.alwaysOnSince?'':' (cycle start)'}`;
 }
 function alwaysOnUsageEntries(ap,start,end,rate){
-  const entries=[],watts=parseFloat(ap.watts)||0,qty=parseFloat(ap.qty)||1;
-  let cur=new Date(start);
-  while(cur<end){
-    const nextMidnight=new Date(cur.getFullYear(),cur.getMonth(),cur.getDate()+1,0,0,0);
-    const segEnd=nextMidnight<end?nextMidnight:end;
-    const minutes=Math.max(1,Math.round((segEnd-cur)/60000));
-    const kwh=watts*qty*(minutes/60)/1000;
-    entries.push({id:uid(),applianceId:ap.id,name:ap.name,category:ap.category||'Others',date:dateOf(cur),start:timeOf(cur),end:timeOf(segEnd),minutes,hours:minutes/60,watts,qty,kwh,cost:kwh*rate,rateAtTime:rate,note:'24/7 until turned off'});
-    cur=segEnd;
-  }
-  return entries;
+  const watts=parseFloat(ap.watts)||0,qty=parseFloat(ap.qty)||1,minutes=Math.max(1,Math.round((end-start)/60000));
+  const kwh=watts*qty*(minutes/60)/1000;
+  return [{
+    id:uid(),applianceId:ap.id,name:ap.name,category:ap.category||'Others',
+    date:dateOf(start),startDate:dateOf(start),endDate:dateOf(end),start:timeOf(start),end:timeOf(end),
+    minutes,hours:minutes/60,watts,qty,kwh,cost:kwh*rate,rateAtTime:rate,
+    span:true,note:'24/7 until turned off'
+  }];
 }
 function turnOffAlwaysOnAppliance(id){
   const now=new Date();
@@ -909,7 +1091,7 @@ function exportData(){
 }
 function importData(e){
   const reader=new FileReader();reader.onload=ev=>{
-    try{const d=JSON.parse(ev.target.result);if(confirm('Overwrite current data?')){sd(touchData(d));S.data=ld();queueCloudSave(S.data);render();alert('Imported!');}}
+    try{const d=JSON.parse(ev.target.result);if(confirm('Overwrite current data?')){const prev=S.data;sd(touchData(normalizeBalance(d)));S.data=ld();queueCloudSave(S.data,prev);render();alert('Imported!');}}
     catch{alert('Invalid file');}
   };reader.readAsText(e.target.files[0]);
 }
@@ -918,7 +1100,7 @@ function setBillKwh(id,m,val){setD(d=>({...d,bills:d.bills.map(b=>b.id===id?{...
 function toggleBillPaid(id,m){setD(d=>({...d,bills:d.bills.map(b=>b.id===id?{...b,paid:{...b.paid,[m]:!b.paid[m]}}:b)}));}
 function addBill(){if(!S.billF.name)return;setD(d=>({...d,bills:[...d.bills,{id:uid(),name:S.billF.name,monthlyAmounts:{},...(S.billF.name.toLowerCase().includes('electric')?{monthlyKwh:{}}:{}),paid:{}}]}));set({billF:{name:''},modal:null});}
 function delBill(id){setD(d=>({...d,bills:d.bills.filter(b=>b.id!==id)}));}
-function updBal(){const v=parseFloat(S.balInput.replace(/,/g,''));if(!isNaN(v)){setD(d=>({...d,balance:v}));set({modal:null});}}
+function updBal(){const v=parseFloat(S.balInput.replace(/,/g,''));if(!isNaN(v)){setD(d=>({...d,balance:v,balanceBase:v+expenseTotal(d)}));set({modal:null});}}
 function openEdit(type,id){
   let item;
   if(type==='food')item=S.data.transactions.find(t=>t.id===id);
@@ -1003,11 +1185,11 @@ function saveEdit(){
     const old=(S.data.applianceUsage||[]).find(x=>x.id===id);
     const appliance=(S.data.appliances||[]).find(a=>a.id===(dr.applianceId||old.applianceId));
     const start=dr.start||old.start||'19:00',end=dr.end||old.end||timePlus(start,parseFloat(old.minutes)||parseFloat(appliance?.sessionMinutes)||60)||'20:00';
-    const minutes=minutesBetween(start,end)||parseFloat(dr.minutes)||old.minutes;
+    const minutes=old.span?(parseFloat(dr.minutes)||old.minutes):(minutesBetween(start,end)||parseFloat(dr.minutes)||old.minutes);
     const watts=parseFloat(appliance?.watts)||parseFloat(dr.watts)||old.watts||0;
     const qty=parseFloat(appliance?.qty)||parseFloat(dr.qty)||old.qty||1;
     const kwh=watts*qty*(minutes/60)/1000,cost=kwh*S.data.meralcoRate;
-    setD(d=>({...d,applianceUsage:(d.applianceUsage||[]).map(x=>x.id===id?{...old,...dr,applianceId:appliance?.id||old.applianceId,name:appliance?.name||dr.name||old.name,category:appliance?.category||old.category,start,end,minutes,hours:minutes/60,watts,qty,kwh,cost,rateAtTime:S.data.meralcoRate}:x)}));
+    setD(d=>({...d,applianceUsage:(d.applianceUsage||[]).map(x=>x.id===id?{...old,...dr,applianceId:appliance?.id||old.applianceId,name:appliance?.name||dr.name||old.name,category:appliance?.category||old.category,date:old.span?old.date:dr.date,startDate:old.startDate,endDate:old.endDate,span:old.span,start,end,minutes,hours:minutes/60,watts,qty,kwh,cost,rateAtTime:S.data.meralcoRate}:x)}));
   } else if(t==='price'){
     setD(d=>({...d,priceItems:d.priceItems.map(p=>p.id===id?{...p,...dr,price:parseFloat(dr.price)||p.price}:p)}));
   } else if(t==='stock'){
@@ -1133,6 +1315,13 @@ function dateBadge(date){
   const dt=dtOf(date),week=Math.min(5,Math.max(1,Math.ceil(dt.getDate()/7)));
   return Sp(`bdg bdg-w${week}`,dt.toLocaleDateString('en-PH',{month:'short',day:'numeric'}));
 }
+function dateSpanLabel(u){
+  const start=u.startDate||u.date,end=u.endDate||u.date;
+  if(!end||end===start)return dateBadge(start);
+  const s=dtOf(start),e=dtOf(end),sameYear=s.getFullYear()===e.getFullYear();
+  return Sp('bdg bdg-w3',`${s.toLocaleDateString('en-PH',{month:'short',day:'numeric'})}-${e.toLocaleDateString('en-PH',{month:'short',day:'numeric',...(sameYear?{}:{year:'numeric'})})}`);
+}
+function logSortDate(u){return u?.endDate||u?.date||'';}
 function metaLine(parts=[],date){
   const meta=D('');meta.style.cssText='font-size:10.5px;color:#8a7260;margin-top:2px;display:flex;align-items:center;gap:5px;flex-wrap:wrap;line-height:1.35';
   if(date)meta.appendChild(dateBadge(date));
@@ -1292,7 +1481,7 @@ function renderDash(){
     const est=applianceAlwaysOnEstimate(a,eRange.start,eRange.end,S.data.meralcoRate);
     return{cost:s.cost+est.cost,kwh:s.kwh+est.kwh};
   },{cost:0,kwh:0});
-  const applianceSessionCost = (S.data.applianceUsage || []).filter(u => inCycle(u,eCycle)).reduce((s, u) => s + u.cost, 0);
+  const applianceSessionCost = (S.data.applianceUsage || []).filter(u => inCycle(u,eCycle)).reduce((s, u) => s + usageCostInRange(u,eRange.start,eRange.end), 0);
   const cycleAlwaysOnCost=cycleAlwaysOnEst.cost;
   const applianceCost = cycleAlwaysOnCost + applianceSessionCost;
   const data=S.data;
@@ -1702,7 +1891,8 @@ function renderReports(){
   const mw=D('');mw.style.cssText='display:flex;align-items:center;gap:7px';
   mw.appendChild(h('span',{style:'font-size:11px;font-weight:700;color:#8a7260'},'Month:'));
   const billMonths=(data.bills||[]).flatMap(b=>[...Object.keys(b.monthlyAmounts||{}),...Object.keys(b.monthlyKwh||{})]);
-  const allMonths=[...new Set([...(data.transactions||[]).map(t=>mk(t.date)),...(data.homeExpenses||[]).map(e=>mk(e.date)),...(data.airconUsage||[]).map(e=>mk(e.date)),...(data.tvUsage||[]).map(e=>mk(e.date)),...(data.applianceUsage||[]).map(e=>mk(e.date)),...billMonths,...Array.from({length:3},(_,i)=>{const d2=new Date();d2.setMonth(d2.getMonth()-i);return mk(dateOf(d2));})])].sort((a,b)=>b.localeCompare(a));
+  const applianceMonths=(data.applianceUsage||[]).flatMap(u=>[mk(u.date),...(u.endDate?[mk(u.endDate)]:[])]);
+  const allMonths=[...new Set([...(data.transactions||[]).map(t=>mk(t.date)),...(data.homeExpenses||[]).map(e=>mk(e.date)),...(data.airconUsage||[]).map(e=>mk(e.date)),...(data.tvUsage||[]).map(e=>mk(e.date)),...applianceMonths,...billMonths,...Array.from({length:3},(_,i)=>{const d2=new Date();d2.setMonth(d2.getMonth()-i);return mk(dateOf(d2));})])].sort((a,b)=>b.localeCompare(a));
   const msel=Sel(rm,allMonths,v=>set({rptMk:v}));
   msel.style.cssText='padding:5px 9px;font-size:12px;border-radius:7px;border:1.5px solid #e8e0d5;background:#fff';
   [...msel.options].forEach(o=>{o.text=mklbl(o.value);});
@@ -1712,7 +1902,9 @@ function renderReports(){
   const homeEx=(data.homeExpenses||[]).filter(e=>mk(e.date)===rm);
   const airconUsage=(data.airconUsage||[]).filter(u=>mk(u.date)===rm);
   const tvUsage=(data.tvUsage||[]).filter(u=>mk(u.date)===rm);
-  const appliances=data.appliances||[],applianceUsage=(data.applianceUsage||[]).filter(u=>mk(u.date)===rm);
+  const monthRange={start:new Date(`${rm}-01T00:00:00`),end:new Date(`${rm}-01T00:00:00`)};
+  monthRange.end.setMonth(monthRange.end.getMonth()+1);
+  const appliances=data.appliances||[],applianceUsage=(data.applianceUsage||[]).filter(u=>overlapRatio(u,monthRange.start,monthRange.end)>0);
   const billsTotal=data.bills.reduce((s,b)=>s+(b.monthlyAmounts[rm]||0),0);
   const foodTotal=foodTx.reduce((s,t)=>s+t.amount,0);
   const homeTotal=homeEx.reduce((s,e)=>s+e.amount,0);
@@ -1806,7 +1998,7 @@ function renderReports(){
   }
   // Top expenses
   const reportCycle=billCycleForMonth(rm,meralcoReadDay(data)),reportRange=cycleDateRange(reportCycle);
-  const allEx=[...foodTx.filter(t=>t.amount>0).map(t=>({name:t.source+(t.note?' — '+t.note:''),amount:t.amount,date:t.date,type:'food'})),...homeEx.map(e=>({name:e.name,amount:e.amount,date:e.date,type:'home'})),...airconUsage.map(u=>({name:'Aircon ('+durationLabel(u.minutes||(u.hours||0)*60)+')',amount:u.cost,date:u.date,type:'aircon'})),...tvUsage.map(u=>({name:'TV ('+durationLabel(u.minutes||(u.hours||0)*60)+')',amount:u.cost,date:u.date,type:'tv'})),...applianceUsage.map(u=>({name:u.name+' ('+durationLabel(u.minutes)+')',amount:u.cost,date:u.date,type:'appliance',badge:u.category||'Appliance'})),...appliances.filter(a=>a.alwaysOn).map(a=>({name:a.name+' (24/7)',amount:applianceAlwaysOnEstimate(a,reportRange.start,reportRange.end,data.meralcoRate).cost,date:`${rm}-01`,type:'appliance',badge:a.category||'Appliance'}))].sort((a,b)=>b.amount-a.amount).slice(0,10);
+  const allEx=[...foodTx.filter(t=>t.amount>0).map(t=>({name:t.source+(t.note?' — '+t.note:''),amount:t.amount,date:t.date,type:'food'})),...homeEx.map(e=>({name:e.name,amount:e.amount,date:e.date,type:'home'})),...airconUsage.map(u=>({name:'Aircon ('+durationLabel(u.minutes||(u.hours||0)*60)+')',amount:u.cost,date:u.date,type:'aircon'})),...tvUsage.map(u=>({name:'TV ('+durationLabel(u.minutes||(u.hours||0)*60)+')',amount:u.cost,date:u.date,type:'tv'})),...applianceUsage.map(u=>({name:u.name+' ('+durationLabel(u.minutes)+')',amount:usageCostInRange(u,monthRange.start,monthRange.end),date:u.date,type:'appliance',badge:u.category||'Appliance'})),...appliances.filter(a=>a.alwaysOn).map(a=>({name:a.name+' (24/7)',amount:applianceAlwaysOnEstimate(a,reportRange.start,reportRange.end,data.meralcoRate).cost,date:`${rm}-01`,type:'appliance',badge:a.category||'Appliance'}))].sort((a,b)=>b.amount-a.amount).slice(0,10);
   if(allEx.length){
     const ec=D('card');ec.style.marginBottom='18px';
     ec.appendChild(Object.assign(D(''),{style:'padding:8px 13px;background:#f8f4ef;border-bottom:1px solid #e8e0d5',innerHTML:'<span class="lbl">Top 10 Expenses This Month</span>'}));
@@ -2013,13 +2205,14 @@ function renderAircon(){
   const rates=airconRates(data);
   const usage=data.airconUsage||[],tvUsage=data.tvUsage||[],appliances=data.appliances||[],applianceUsage=data.applianceUsage||[];
   const readDay=meralcoReadDay(data);
-  const cycleMap=new Map([...usage,...tvUsage,...applianceUsage,{date:toStr()}].map(e=>{const c=cycleForDate(e.date,readDay);return[c.key,c];}));
+  const cycleSeeds=[...usage,...tvUsage,...applianceUsage,...applianceUsage.filter(u=>u.endDate).map(u=>({date:u.endDate})),{date:toStr()}];
+  const cycleMap=new Map(cycleSeeds.map(e=>{const c=cycleForDate(e.date,readDay);return[c.key,c];}));
   const cycles=[...cycleMap.values()].sort((a,b)=>b.key.localeCompare(a.key));
   if(cycles.length&&!cycles.some(c=>c.key===S.viewMk))S.viewMk=cycleForDate(new Date(),readDay).key;
   const selectedCycle=cycles.find(c=>c.key===S.viewMk)||cycleForDate(new Date(),readDay);
   const mUsage=usage.filter(u=>inCycle(u,selectedCycle));
   const mTv=tvUsage.filter(u=>inCycle(u,selectedCycle));
-  const mApplianceUsage=applianceUsage.filter(u=>inCycle(u,selectedCycle));
+  const mApplianceUsage=applianceUsage.filter(u=>inCycle(u,selectedCycle)).sort((a,b)=>String(logSortDate(b)).localeCompare(String(logSortDate(a)))||String(b.end||'').localeCompare(String(a.end||'')));
   const mCost=mUsage.reduce((s,u)=>s+u.cost,0),tvCost=mTv.reduce((s,u)=>s+u.cost,0);
   const alwaysOn=appliances.filter(a=>a.alwaysOn);
   const selectedRange=cycleDateRange(selectedCycle);
@@ -2029,8 +2222,8 @@ function renderAircon(){
   },{cost:0,kwh:0});
   const alwaysOnCost=alwaysOnCycleEst.cost;
   const alwaysOnKwh=alwaysOnCycleEst.kwh;
-  const applianceSessionCost=mApplianceUsage.reduce((s,u)=>s+u.cost,0);
-  const applianceSessionKwh=mApplianceUsage.reduce((s,u)=>s+u.kwh,0);
+  const applianceSessionCost=mApplianceUsage.reduce((s,u)=>s+usageCostInRange(u,selectedRange.start,selectedRange.end),0);
+  const applianceSessionKwh=mApplianceUsage.reduce((s,u)=>s+usageKwhInRange(u,selectedRange.start,selectedRange.end),0);
   const applianceCost=alwaysOnCost+applianceSessionCost,applianceKwh=alwaysOnKwh+applianceSessionKwh;
   const mHours=mUsage.reduce((s,u)=>s+u.hours,0);
   const airconKwh=mUsage.reduce((s,u)=>s+u.kwh,0);
@@ -2144,7 +2337,7 @@ function renderAircon(){
     const left=D('');
     left.appendChild(h('div',{style:'font-size:13px;font-weight:600'},`Aircon · ${durationLabel(u.minutes||(u.hours||0)*60)} · ${airconModeLabel(u.mode,u.sleepMode)}${u.tempC!==''&&u.tempC!=null?' · set '+u.tempC+'C':''}${u.roomTemp!==''&&u.roomTemp!=null?' · room '+u.roomTemp+'C':''}`));
     const meta=D('');meta.style.cssText='font-size:10.5px;color:#8a7260;margin-top:2px;display:flex;align-items:center;gap:5px;flex-wrap:wrap';
-    meta.appendChild(dateBadge(u.date));
+    meta.appendChild(dateSpanLabel(u));
     meta.appendChild(h('span',{},`${u.start&&u.end?fmtTime12(u.start)+'-'+fmtTime12(u.end)+' · ':''}${u.kwh.toFixed(2)} kWh${u.outdoorTemp!==''&&u.outdoorTemp!=null?' · out '+u.outdoorTemp+'C':''}`));
     left.appendChild(meta);
     const right=D('');right.style.cssText='text-align:right';
@@ -2162,7 +2355,7 @@ function renderAircon(){
     const left=D('');
     left.appendChild(h('div',{style:'font-size:13px;font-weight:600'},`TV · ${durationLabel(u.minutes||(u.hours||0)*60)}`));
     const meta=D('');meta.style.cssText='font-size:10.5px;color:#8a7260;margin-top:2px;display:flex;align-items:center;gap:5px;flex-wrap:wrap';
-    meta.appendChild(dateBadge(u.date));
+    meta.appendChild(dateSpanLabel(u));
     meta.appendChild(h('span',{},`${u.start&&u.end?fmtTime12(u.start)+'-'+fmtTime12(u.end)+' · ':''}${u.watts}W · ${u.kwh.toFixed(2)} kWh`));
     left.appendChild(meta);
     const right=D('');right.style.cssText='text-align:right';
@@ -2180,7 +2373,7 @@ function renderAircon(){
     const left=D('');
     left.appendChild(h('div',{style:'font-size:13px;font-weight:600'},`${u.name} · ${durationLabel(u.minutes)}`));
     const meta=D('');meta.style.cssText='font-size:10.5px;color:#8a7260;margin-top:2px;display:flex;align-items:center;gap:5px;flex-wrap:wrap';
-    meta.appendChild(dateBadge(u.date));
+    meta.appendChild(dateSpanLabel(u));
     meta.appendChild(h('span',{},`${u.start&&u.end?fmtTime12(u.start)+'-'+fmtTime12(u.end)+' · ':''}${u.qty}x ${u.watts}W · ${u.kwh.toFixed(3)} kWh`));
     left.appendChild(meta);
     const right=D('');right.style.cssText='text-align:right';
@@ -2200,8 +2393,10 @@ function renderAppliances(){
   const always=appliances.filter(a=>a.alwaysOn);
   const session=appliances.filter(a=>!a.alwaysOn);
   const alwaysCost=always.reduce((s,a)=>s+applianceMonthly(a,data.meralcoRate).cost,0);
-  const monthUsage=usage.filter(u=>mk(u.date)===curMk());
-  const sessionCost=monthUsage.reduce((s,u)=>s+u.cost,0);
+  const curRange={start:new Date(`${curMk()}-01T00:00:00`),end:new Date(`${curMk()}-01T00:00:00`)};
+  curRange.end.setMonth(curRange.end.getMonth()+1);
+  const monthUsage=usage.filter(u=>overlapRatio(u,curRange.start,curRange.end)>0);
+  const sessionCost=monthUsage.reduce((s,u)=>s+usageCostInRange(u,curRange.start,curRange.end),0);
 
   const top=D('row');top.style.marginBottom='10px';
   top.appendChild(h('span',{style:'font-size:14px;font-weight:700'},'Appliance Manager'));
@@ -2713,7 +2908,12 @@ function renderModal(){
     const syncCard=D('');
     syncCard.style.cssText='background:#f8f4ef;border:1px solid #e8e0d5;border-radius:8px;padding:10px 11px;margin-bottom:12px';
     syncCard.appendChild(h('div',{style:'font-size:12px;font-weight:800;color:#3a2818;margin-bottom:3px'},'Cloud Sync'));
-    syncCard.appendChild(h('div',{style:'font-size:11px;color:#8a7260;line-height:1.45;margin-bottom:9px'},syncLabel()));
+    syncCard.appendChild(h('div',{style:'font-size:11px;color:#8a7260;line-height:1.45;margin-bottom:7px'},syncLabel()));
+    const syncTimes=D('');
+    syncTimes.style.cssText='display:grid;grid-template-columns:1fr;gap:2px;font-size:10.5px;color:#8a7260;line-height:1.4;margin-bottom:9px';
+    syncTimes.appendChild(h('div',{},'Last updated: '+syncTimeLabel(S.data.modifiedAt)));
+    syncTimes.appendChild(h('div',{},'Last synced: '+syncTimeLabel(S.data.syncedAt)));
+    syncCard.appendChild(syncTimes);
     if(S.syncErr)syncCard.appendChild(h('div',{style:'font-size:10.5px;color:#b83030;line-height:1.4;margin-bottom:9px'},S.syncErr));
     const syncBtns=D('');
     syncBtns.style.cssText='display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px';
@@ -2881,9 +3081,13 @@ function renderModal(){
       const g2=D('g2');
       const sfg=D('fg');sfg.appendChild(h('label',{cls:'fl'},'Start Time'));sfg.appendChild(Time12Control(dr.start,v=>dr.start=v));g2.appendChild(sfg);
       const efg=D('fg');efg.appendChild(h('label',{cls:'fl'},'End Time'));efg.appendChild(Time12Control(dr.end,v=>dr.end=v));g2.appendChild(efg);c.appendChild(g2);
-      const previewMinutes=minutesBetween(dr.start,dr.end)||parseFloat(dr.minutes)||0;
+      const previewMinutes=dr.span?(parseFloat(dr.minutes)||0):(minutesBetween(dr.start,dr.end)||parseFloat(dr.minutes)||0);
       c.appendChild(h('p',{style:'font-size:11px;color:#8a7260;line-height:1.5;margin-bottom:10px'},`Duration: ${durationLabel(previewMinutes)}.`));
-      const di=Inp('',{type:'date',value:dr.date});di.oninput=e=>dr.date=e.target.value;c.appendChild(Fg('Date',di));
+      if(dr.span){
+        c.appendChild(h('p',{style:'font-size:11px;color:#8a7260;line-height:1.5;margin-bottom:10px'},`Date span: ${dateSpanLabel(dr).textContent}.`));
+      }else{
+        const di=Inp('',{type:'date',value:dr.date});di.oninput=e=>dr.date=e.target.value;c.appendChild(Fg('Date',di));
+      }
     } else if(t==='price'){
       const ni=Inp('',{type:'text',value:dr.name||''});ni.oninput=e=>dr.name=e.target.value;setTimeout(()=>ni.focus(),50);c.appendChild(Fg('Item Name',ni));
       const g2=D('g2');
