@@ -494,6 +494,13 @@ function sk(k){k?localStorage.setItem(GK,k):localStorage.removeItem(GK);}
 const supa=window.supabase?.createClient?.(SUPABASE_URL,SUPABASE_KEY)||null;
 let cloudSaveTimer=null;
 let cloudLoadedFor='';
+function dataStamp(data){
+  const t=Date.parse(data?.modifiedAt||data?.syncedAt||'');
+  return isNaN(t)?0:t;
+}
+function touchData(data){
+  return{...data,schemaVersion:SCHEMA_VERSION,modifiedAt:new Date().toISOString()};
+}
 function syncLabel(){
   if(!supa)return'Sync unavailable';
   if(S?.syncSaving)return'Syncing...';
@@ -520,7 +527,7 @@ function queueCloudSave(data=S.data){
 async function cloudSave(data=S.data){
   if(!supa||!S?.user)return;
   S.syncSaving=true;S.syncErr='';render();
-  const payload={...data,schemaVersion:SCHEMA_VERSION,syncedAt:new Date().toISOString()};
+  const payload={...data,schemaVersion:SCHEMA_VERSION,modifiedAt:data.modifiedAt||new Date().toISOString(),syncedAt:new Date().toISOString()};
   const {error}=await supa.from(SYNC_TABLE).upsert({user_id:S.user.id,data:payload,updated_at:new Date().toISOString()});
   S.syncSaving=false;
   if(error)S.syncErr=error.message;
@@ -539,8 +546,9 @@ async function cloudLoad(){
   if(cloudData){
     const same=JSON.stringify(cloudData)===JSON.stringify(S.data);
     if(same){render();return;}
-    const shouldLoad=confirm(`Cloud data found from ${new Date(data.updated_at).toLocaleString('en-PH')}.\n\nLoad it on this device? Choose Cancel to upload this device's current data instead.`);
-    if(shouldLoad){sd(cloudData);S.data=ld();S.syncErr='';render();}
+    const cloudTs=Math.max(dataStamp(cloudData),Date.parse(data.updated_at||'')||0);
+    const localTs=dataStamp(S.data);
+    if(!localTs||cloudTs>=localTs){sd(cloudData);S.data=ld();S.syncErr='';render();}
     else queueCloudSave(S.data);
   }else{
     queueCloudSave(S.data);
@@ -596,7 +604,7 @@ let S={
 let openSw=null;
 let liveTick=null;
 function set(p){if(typeof p==='function')Object.assign(S,p(S));else Object.assign(S,p);render();}
-function setD(fn){const d=fn(S.data);sd(d);S.data=d;queueCloudSave(d);render();}
+function setD(fn){const d=touchData(fn(S.data));sd(d);S.data=d;queueCloudSave(d);render();}
 
 function ensureLiveTick(){
   const hasActive=(S.data.activeSessions||[]).length>0;
@@ -901,7 +909,7 @@ function exportData(){
 }
 function importData(e){
   const reader=new FileReader();reader.onload=ev=>{
-    try{const d=JSON.parse(ev.target.result);if(confirm('Overwrite current data?')){sd(d);S.data=ld();queueCloudSave(S.data);render();alert('Imported!');}}
+    try{const d=JSON.parse(ev.target.result);if(confirm('Overwrite current data?')){sd(touchData(d));S.data=ld();queueCloudSave(S.data);render();alert('Imported!');}}
     catch{alert('Invalid file');}
   };reader.readAsText(e.target.files[0]);
 }
