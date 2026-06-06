@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no,viewport-fit=cover"/>
+<title>kipr</title>
+
+<!-- PWA / iOS home screen -->
+<meta name="apple-mobile-web-app-capable" content="yes"/>
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
+<meta name="apple-mobile-web-app-title" content="kipr"/>
+<meta name="mobile-web-app-capable" content="yes"/>
+<meta name="theme-color" content="#1b4d35"/>
+<meta name="description" content="kipr — Filipino household budget tracker for expenses, electricity, and pantry."/>
+
+<!-- Fonts -->
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Lora:wght@500;600&family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&display=swap"/>
+
+<link rel="apple-touch-icon" href="Kipr-icon.png"/>
+
+<link rel="stylesheet" href="styles.css"/>
+
+<style>
+  /*
+   * Body background = header green so the notch area (iPhone) and
+   * status bar (iPad) are never white. The #app content sits above.
+   * The home-indicator strip (iPhone bottom) is covered by tabbar's
+   * padding-bottom: max(env(safe-area-inset-bottom,0px),0px) in CSS.
+   */
+  body { background: #1b4d35; }
+  #app { background: #f4f0ea; }
+</style>
+</head>
+<body>
+<div id="app"></div>
+<script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+<script src="app.js"></script>
+</body>
+</html>
