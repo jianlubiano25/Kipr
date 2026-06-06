@@ -49,6 +49,15 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:20px;heigh
 .h-bal{text-align:right;flex-shrink:0}
 .hbl{font-size:9px;color:rgba(255,255,255,.48);text-transform:uppercase;letter-spacing:.7px}
 .hbv{font-family:'Lora',Georgia,serif;font-size:21px;font-weight:600;color:#fff}
+.bal-line{display:flex;align-items:center;min-width:0}
+.bal-line-hero{gap:8px}
+.bal-line-head{justify-content:flex-end;gap:5px}
+.bal-line .sf,.bal-line .hbv{min-width:0}
+.bal-toggle{width:26px;height:26px;flex:0 0 26px;border-radius:50%;border:1px solid rgba(255,255,255,.28);background:rgba(255,255,255,.1);color:rgba(255,255,255,.9);line-height:1;display:inline-flex;align-items:center;justify-content:center;cursor:pointer;transition:background .15s,transform .1s}
+.bal-toggle svg{width:15px;height:15px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.bal-toggle:active{background:rgba(255,255,255,.18);transform:scale(.96)}
+.bal-toggle-head{width:22px;height:22px;flex-basis:22px}
+.bal-toggle-head svg{width:13px;height:13px}
 
 /* ─── TAB BAR ────────────────────────────────────────────────── */
 .tabbar{
@@ -67,6 +76,22 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:20px;heigh
 .tb-ic{font-size:19px;line-height:1}
 .tb-lb{font-size:9px;font-weight:500;letter-spacing:.1px}
 .tb-lb-on{font-weight:800}
+
+html.app-standalone .tabbar{
+  padding-bottom:0;
+  height:58px;
+  min-height:58px;
+  max-height:58px;
+}
+
+@media (display-mode: standalone){
+  .tabbar{
+    padding-bottom:0;
+    height:58px;
+    min-height:58px;
+    max-height:58px;
+  }
+}
 
 /* ─── CONTENT AREA ───────────────────────────────────────────── */
 .sec{padding:13px 13px 16px;flex:1;min-height:0;min-width:0;overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain}

@@ -1,5 +1,5 @@
 // ─── CONSTANTS ───────────────────────────────────────────────
-const SK='ipon-v5', GK='ipon-gkey', SCHEMA_VERSION=2;
+const SK='ipon-v5', GK='ipon-gkey', BK='ipon-balance-hidden', SCHEMA_VERSION=2;
 const SUPABASE_URL='https://yzygamcsltydsqsyzqbj.supabase.co';
 const SUPABASE_KEY='sb_publishable_eWEeUsDYUsRGDX5sd7U91Q_sQMUVMUE';
 const LIVE_SYNC_TABLE='budget_records';
@@ -563,6 +563,8 @@ function ld(){try{const s=localStorage.getItem(SK);if(s){const d=JSON.parse(s);i
 function sd(d){try{localStorage.setItem(SK,JSON.stringify(d));}catch{}}
 function lk(){return localStorage.getItem(GK)||'';}
 function sk(k){k?localStorage.setItem(GK,k):localStorage.removeItem(GK);}
+function lbHidden(){try{return localStorage.getItem(BK)==='1';}catch{return false;}}
+function sbHidden(v){try{v?localStorage.setItem(BK,'1'):localStorage.removeItem(BK);}catch{}}
 const supa=window.supabase?.createClient?.(SUPABASE_URL,SUPABASE_KEY)||null;
 let cloudSaveTimer=null;
 let cloudLoadedFor='';
@@ -748,6 +750,7 @@ async function initCloud(){
 // ─── STATE ───────────────────────────────────────────────────
 let S={
   tab:'dash',data:ld(),geminiKey:lk(),drawerOpen:false,
+  balanceHidden:lbHidden(),
   user:null,syncErr:'',syncSaving:false,
   modal:null,viewMk:curMk(),billsMk:curMk(),chartCycleKey:'',chartMonthKey:curMk(),selectedMealDate:toStr(),
   auditOpen:false,
@@ -1311,6 +1314,20 @@ function h(tag,attrs,...ch){
 }
 const D=(cls,...c)=>h('div',{cls},...c);
 const Sp=(cls,t)=>h('span',{cls},t);
+const balanceDisplay=n=>S.balanceHidden?'₱••••••':fmt(n);
+function balanceToggleBtn(extraCls=''){
+  const btn=h('button',{
+    cls:`bal-toggle ${extraCls}`.trim(),
+    type:'button',
+    title:S.balanceHidden?'Show balance':'Hide balance',
+    'aria-label':S.balanceHidden?'Show balance':'Hide balance',
+    onClick:e=>{e.stopPropagation();const hidden=!S.balanceHidden;sbHidden(hidden);set({balanceHidden:hidden});}
+  });
+  btn.innerHTML=S.balanceHidden
+    ? '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/></svg>'
+    : '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m3 3 18 18"/><path d="M10.6 6.2A10.8 10.8 0 0 1 12 6c6.5 0 10 6 10 6a17.9 17.9 0 0 1-3.1 3.7"/><path d="M6.5 6.8C3.6 8.7 2 12 2 12s3.5 6 10 6a9.9 9.9 0 0 0 4.2-.9"/><path d="M9.9 9.9a3 3 0 0 0 4.2 4.2"/></svg>';
+  return btn;
+}
 function dateBadge(date){
   const dt=dtOf(date),week=Math.min(5,Math.max(1,Math.ceil(dt.getDate()/7)));
   return Sp(`bdg bdg-w${week}`,dt.toLocaleDateString('en-PH',{month:'short',day:'numeric'}));
@@ -1493,9 +1510,11 @@ function renderDash(){
   const hrow=D('row');hrow.style.marginBottom='9px';
   const hl=D('');
   hl.appendChild(Object.assign(D('lblw'),{textContent:'Current Balance'}));
-  const bv=D('sf');bv.style.cssText='font-size:33px;color:#fff;display:block;line-height:1.05;margin:2px 0';bv.textContent=fmt(data.balance);
+  const balLine=D('bal-line bal-line-hero');
+  const bv=D('sf');bv.style.cssText='font-size:33px;color:#fff;display:block;line-height:1.05;margin:2px 0';bv.textContent=balanceDisplay(data.balance);
+  balLine.appendChild(bv);balLine.appendChild(balanceToggleBtn('bal-toggle-hero'));
   const bs=D('');bs.style.cssText='font-size:11px;color:rgba(255,255,255,.55);margin-top:2px;line-height:1.45';bs.textContent=`Avg monthly expenses ${fmt(Math.round(avgMonthlyExpense))}${historyMonths?` from ${historyMonths} month${historyMonths!==1?'s':''}`:''} · ~${runwayMonths.toFixed(1)} months runway`;
-  hl.appendChild(bv);hl.appendChild(bs);
+  hl.appendChild(balLine);hl.appendChild(bs);
   const eb=h('button',{cls:'btn bg',style:'color:rgba(255,255,255,.85);border-color:rgba(255,255,255,.25);padding:5px 10px;font-size:11px',onClick:()=>set({balInput:String(data.balance),modal:'editBal'})},'Edit ✏️');
   hrow.appendChild(hl);hrow.appendChild(eb);hcp.appendChild(hrow);
   const rrow=D('row');rrow.style.marginBottom='4px';rrow.innerHTML=`<span style="font-size:10px;color:rgba(255,255,255,.45)">Runway vs 12 months</span><span style="font-size:10px;color:rgba(255,255,255,.45)">${runwayMonths.toFixed(1)} / 12</span>`;
@@ -3120,6 +3139,7 @@ function render(){
   ensureLiveTick();
   openSw=null;
   const root=document.getElementById('app');root.innerHTML='';
+  document.body.classList.add('app-ready');
   root.style.background='#f4f0ea';
   const app=D('');app.style.cssText='margin:0 auto;height:100vh;height:100svh;background:#f4f0ea;display:flex;flex-direction:column;overflow:hidden;min-height:0';app.className='bt-app';
   // Close swipe on tap outside
@@ -3130,7 +3150,11 @@ function render(){
   const hdr=h('div',{cls:'hdr'});const hrow=h('div',{cls:'hrow'});
   hrow.appendChild(h('button',{cls:'h-menu',onClick:()=>set({drawerOpen:true})},'☰'));
   const hmid=D('h-mid');hmid.appendChild(Object.assign(D('htitle'),{textContent:SCREEN_LABELS[S.tab]||'kipr'}));hmid.appendChild(Object.assign(D('hsub'),{textContent:'Budget · Prices · Savings'}));
-  const hbal=D('h-bal');hbal.appendChild(Object.assign(D('hbl'),{textContent:'Balance'}));hbal.appendChild(Object.assign(D('hbv'),{textContent:fmt(S.data.balance)}));
+  const hbal=D('h-bal');hbal.appendChild(Object.assign(D('hbl'),{textContent:'Balance'}));
+  const hbalLine=D('bal-line bal-line-head');
+  hbalLine.appendChild(Object.assign(D('hbv'),{textContent:balanceDisplay(S.data.balance)}));
+  hbalLine.appendChild(balanceToggleBtn('bal-toggle-head'));
+  hbal.appendChild(hbalLine);
   hrow.appendChild(hmid);hrow.appendChild(hbal);hdr.appendChild(hrow);app.appendChild(hdr);
   // Content
   let content;
@@ -3164,6 +3188,11 @@ function render(){
   app.appendChild(tb);
   const modal=renderModal();if(modal)app.appendChild(modal);
   root.appendChild(app);
+  const splash=document.getElementById('splash');
+  if(splash&&!splash.classList.contains('splash-hide')){
+    splash.classList.add('splash-hide');
+    setTimeout(()=>splash.remove(),220);
+  }
   ensureWeather();
 }
 
