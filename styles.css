@@ -27,6 +27,8 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:20px;heigh
 .dov{position:fixed;inset:0;background:rgba(0,0,0,.44);z-index:190;opacity:0;pointer-events:none;transition:opacity .28s}
 .dov.show{opacity:1;pointer-events:all}
 .dr-hdr{background:#f5f5f5;padding:12px 18px;display:flex;justify-content:flex-start;border-bottom:1px solid #e8e0d5}
+.dr-logo-btn{background:none;border:none;padding:0;border-radius:8px;cursor:pointer;line-height:0}
+.dr-logo-btn:active{opacity:.72}
 .dr-logo{width:150px;height:54px;border-radius:8px;object-fit:contain;object-position:left center;display:block}
 .dr-items{flex:1;overflow-y:auto;padding:6px 0}
 .dr-item{display:flex;align-items:center;gap:13px;padding:11px 20px;cursor:pointer;transition:background .15s;border:none;background:none;width:100%;text-align:left}
@@ -152,7 +154,8 @@ input[type="date"],input[type="time"]{
 
 /* ─── SWIPE ROWS ─────────────────────────────────────────────── */
 .sw{position:relative;overflow:hidden}
-.swc{position:relative;z-index:1;background:#fff;transition:transform .15s ease;will-change:transform}
+.swc{position:relative;z-index:1;background:#fff;transition:transform .15s ease;will-change:transform;cursor:grab;user-select:none}
+.swc:active{cursor:grabbing}
 .swa{position:absolute;right:0;top:0;bottom:0;display:flex;z-index:0}
 .sw-off{width:64px;background:#b8720c;color:#fff;border:none;font-size:12px;font-weight:700;cursor:pointer;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px}
 .sw-edit{width:64px;background:#2e6e4f;color:#fff;border:none;font-size:12px;font-weight:700;cursor:pointer;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px}
@@ -178,7 +181,7 @@ input[type="date"],input[type="time"]{
 .tip-r:last-child{border-bottom:none}
 
 /* ─── BADGES ─────────────────────────────────────────────────── */
-.bdg{display:inline-block;font-size:9px;font-weight:800;padding:2px 6px;border-radius:8px;letter-spacing:.2px}
+.bdg{display:inline-block;font-size:9px;font-weight:800;padding:2px 6px;border-radius:8px;letter-spacing:.2px;white-space:nowrap;flex-shrink:0}
 .bdg-f{background:#e6f3ec;color:#1b4d35}
 .bdg-h{background:#e8f0fe;color:#1a56c4}
 .bdg-a{background:#fff3e0;color:#e65100}

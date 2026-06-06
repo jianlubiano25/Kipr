@@ -223,6 +223,13 @@ function auditDateTime(date,time,endOfDay=false){
   return isNaN(dt)?null:dt;
 }
 function usageDateRange(u,start,end){
+  if(u.startedAt||u.endedAt){
+    const s=new Date(u.startedAt||`${u.startDate||u.date}T${u.start||'00:00'}:00`);
+    let e=new Date(u.endedAt||`${u.endDate||u.date}T${u.end||'23:59'}:00`);
+    if(isNaN(s)||isNaN(e))return null;
+    if(e<=s)e=new Date(e.getTime()+86400000);
+    return{s,e,exact:true};
+  }
   if(u.startDate||u.endDate){
     const s=auditDateTime(u.startDate||u.date,u.start||'00:00'),e=auditDateTime(u.endDate||u.date,u.end||'23:59');
     return s&&e?{s,e:e<=s?new Date(e.getTime()+86400000):e,exact:true}:null;
@@ -246,6 +253,18 @@ function overlapRatio(u,start,end){
 }
 function usageCostInRange(u,start,end){return (parseFloat(u.cost)||0)*overlapRatio(u,start,end);}
 function usageKwhInRange(u,start,end){return (parseFloat(u.kwh)||0)*overlapRatio(u,start,end);}
+function overlapMinutes(u,start,end){
+  const r=usageDateRange(u,start,end);
+  if(!r)return 0;
+  return Math.max(0,Math.round((Math.min(r.e,end)-Math.max(r.s,start))/60000));
+}
+function auditApplianceKwhInRange(u,start,end){
+  if(!u?.start&&!u?.end&&!u?.startDate&&!u?.endDate){
+    const r=usageDateRange(u,start,end);
+    return r&&overlapsRange(r.s,r.e,start,end)?(parseFloat(u.kwh)||0):0;
+  }
+  return usageKwhInRange(u,start,end);
+}
 function meterAudit(data=S?.data,f=S?.auditF){
   const start=auditDateTime(f?.startDate,f?.startTime),end=auditDateTime(f?.endDate,f?.endTime);
   const startRead=parseFloat(f?.startRead),endRead=parseFloat(f?.endRead),rate=parseFloat(data?.meralcoRate)||14.3345;
@@ -256,8 +275,8 @@ function meterAudit(data=S?.data,f=S?.auditF){
   const aircon=(data?.airconUsage||[]).filter(include);
   const tv=(data?.tvUsage||[]).filter(include);
   const appliances=(data?.applianceUsage||[]).filter(include);
-  const sum=rows=>rows.reduce((s,u)=>s+(parseFloat(u.kwh)||0),0);
-  const airconKwh=sum(aircon),tvKwh=sum(tv),sessionKwh=appliances.reduce((s,u)=>s+usageKwhInRange(u,start,end),0);
+  const sumInRange=rows=>rows.reduce((s,u)=>s+usageKwhInRange(u,start,end),0);
+  const airconKwh=sumInRange(aircon),tvKwh=sumInRange(tv),sessionKwh=appliances.reduce((s,u)=>s+auditApplianceKwhInRange(u,start,end),0);
   const alwaysRows=(data?.appliances||[]).filter(a=>a.alwaysOn).map(a=>{
     const est=applianceAlwaysOnEstimate(a,start,end,rate);
     return{...a,...est};
@@ -504,7 +523,8 @@ function mergeDaily24hApplianceLogs(data){
       const minutes=batch.reduce((s,u)=>s+(parseFloat(u.minutes)||1440),0);
       const kwh=batch.reduce((s,u)=>s+(parseFloat(u.kwh)||0),0);
       const cost=batch.reduce((s,u)=>s+(parseFloat(u.cost)||0),0);
-      merged.push({...first,date:first.date,startDate:first.date,endDate:dateOf(end),start:first.start||'00:00',end:last.end||'00:00',minutes,hours:minutes/60,kwh,cost,span:true,note:noteParts(first.note,'Merged 24/7 daily logs')});
+      const startTime=first.start||'00:00',endTime=last.end||'00:00';
+      merged.push({...first,date:first.date,startDate:first.date,endDate:dateOf(end),start:startTime,end:endTime,startedAt:new Date(`${first.date}T${startTime}:00`).toISOString(),endedAt:end.toISOString(),minutes,hours:minutes/60,kwh,cost,span:true,note:noteParts(first.note,'Merged 24/7 daily logs')});
       deletedIds.push(...batch.slice(1).map(u=>u.id).filter(Boolean));
       batch=[];
     };
@@ -785,6 +805,11 @@ let S={
 };
 let openSw=null;
 let liveTick=null;
+const scrollByTab={};
+function rememberContentScroll(){
+  const cur=document.querySelector('#app .sec');
+  if(cur?.dataset?.tab)scrollByTab[cur.dataset.tab]=cur.scrollTop;
+}
 function set(p){if(typeof p==='function')Object.assign(S,p(S));else Object.assign(S,p);render();}
 function setD(fn){
   const prev=S.data;
@@ -902,7 +927,8 @@ function addAppliance(){
   const watts=parseFloat(S.applianceF.watts),qty=parseFloat(S.applianceF.qty)||1;
   const sessionMinutes=S.applianceF.alwaysOn?0:(parseFloat(S.applianceF.sessionMinutes)||0);
   if(!S.applianceF.name||!watts||watts<=0||qty<=0||(!S.applianceF.alwaysOn&&!sessionMinutes))return;
-  const item={id:uid(),name:S.applianceF.name,category:S.applianceF.category,watts,qty,hoursPerDay:S.applianceF.alwaysOn?24:0,daysPerMonth:S.applianceF.alwaysOn?30:0,sessionMinutes,alwaysOn:!!S.applianceF.alwaysOn,alwaysOnSince:S.applianceF.alwaysOn?new Date().toISOString():'',note:S.applianceF.note};
+  const now=new Date().toISOString();
+  const item={id:uid(),createdAt:now,name:S.applianceF.name,category:S.applianceF.category,watts,qty,hoursPerDay:S.applianceF.alwaysOn?24:0,daysPerMonth:S.applianceF.alwaysOn?30:0,sessionMinutes,alwaysOn:!!S.applianceF.alwaysOn,alwaysOnSince:S.applianceF.alwaysOn?now:'',note:S.applianceF.note};
   setD(d=>({...d,appliances:[item,...(d.appliances||[])]}));
   set({applianceF:{name:'',category:'Others',watts:'',qty:'1',sessionMinutes:'60',alwaysOn:false,note:''},modal:null});
 }
@@ -910,6 +936,8 @@ function delAppliance(id){setD(d=>({...d,appliances:(d.appliances||[]).filter(x=
 function alwaysOnStartFor(ap,d,now=new Date()){
   const since=ap.alwaysOnSince?new Date(ap.alwaysOnSince):null;
   if(since&&!isNaN(since)&&since<now)return since;
+  const created=ap.createdAt?new Date(ap.createdAt):null;
+  if(created&&!isNaN(created)&&created<now)return created;
   const cycle=cycleForDate(now,meralcoReadDay(d));
   return new Date(`${dateOf(cycle.start)}T00:00:00`);
 }
@@ -917,7 +945,7 @@ function alwaysOnSinceLabel(ap,d=S.data){
   const since=ap.alwaysOnSince?new Date(ap.alwaysOnSince):null;
   const dt=since&&!isNaN(since)?since:alwaysOnStartFor(ap,d);
   const label=dt.toLocaleDateString('en-PH',{month:'short',day:'numeric',year:'numeric'})+' · '+fmtTime12(timeOf(dt));
-  return `On since ${label}${ap.alwaysOnSince?'':' (cycle start)'}`;
+  return `On since ${label}${ap.alwaysOnSince||ap.createdAt?'':' (cycle start)'}`;
 }
 function alwaysOnUsageEntries(ap,start,end,rate){
   const watts=parseFloat(ap.watts)||0,qty=parseFloat(ap.qty)||1,minutes=Math.max(1,Math.round((end-start)/60000));
@@ -925,6 +953,7 @@ function alwaysOnUsageEntries(ap,start,end,rate){
   return [{
     id:uid(),applianceId:ap.id,name:ap.name,category:ap.category||'Others',
     date:dateOf(start),startDate:dateOf(start),endDate:dateOf(end),start:timeOf(start),end:timeOf(end),
+    startedAt:start.toISOString(),endedAt:end.toISOString(),
     minutes,hours:minutes/60,watts,qty,kwh,cost:kwh*rate,rateAtTime:rate,
     span:true,note:'24/7 until turned off'
   }];
@@ -981,20 +1010,21 @@ function stopActiveSession(id){
     const activeSessions=(d.activeSessions||[]).filter(s=>s.id!==id);
     if(active.type==='aircon'){
       const mode=airconModeFrom(active.mode,active.sleepMode);
-      const session=airconSessionFromDates(new Date(active.startedAt),now,mode,airconRates(d),active.tempC,active.outdoorTemp,d);
-      const entry={id:uid(),...session,hours:parseFloat(session.hours.toFixed(2)),kwh:session.kwh,cost:session.kwh*rate,rateAtTime:rate,ratesAtTime:airconRates(d),tempC:active.tempC??'',roomTemp:active.roomTemp??'',outdoorTemp:active.outdoorTemp??'',outdoorFeels:active.outdoorFeels??'',outdoorHumidity:active.outdoorHumidity??'',weatherAtTime:active.weatherAtStart||d.weather||null,formula:'two-phase-inverter'};
+      const startDt=new Date(active.startedAt);
+      const session=airconSessionFromDates(startDt,now,mode,airconRates(d),active.tempC,active.outdoorTemp,d);
+      const entry={id:uid(),...session,startedAt:startDt.toISOString(),endedAt:now.toISOString(),hours:parseFloat(session.hours.toFixed(2)),kwh:session.kwh,cost:session.kwh*rate,rateAtTime:rate,ratesAtTime:airconRates(d),tempC:active.tempC??'',roomTemp:active.roomTemp??'',outdoorTemp:active.outdoorTemp??'',outdoorFeels:active.outdoorFeels??'',outdoorHumidity:active.outdoorHumidity??'',weatherAtTime:active.weatherAtStart||d.weather||null,formula:'two-phase-inverter'};
       return{...d,activeSessions,airconUsage:[entry,...(d.airconUsage||[])]};
     }
     const minutes=activeElapsedMinutes(active,now);
     if(active.type==='tv'){
       const startDt=new Date(active.startedAt),watts=parseFloat(active.watts)||parseFloat(d.tvWatts)||175,kwh=watts*(minutes/60)/1000;
-      const entry={id:uid(),date:dateOf(startDt),start:timeOf(startDt),end:timeOf(now),minutes,hours:minutes/60,watts,kwh,cost:kwh*rate,rateAtTime:rate};
+      const entry={id:uid(),date:dateOf(startDt),start:timeOf(startDt),end:timeOf(now),startedAt:startDt.toISOString(),endedAt:now.toISOString(),minutes,hours:minutes/60,watts,kwh,cost:kwh*rate,rateAtTime:rate};
       return{...d,activeSessions,tvUsage:[entry,...(d.tvUsage||[])]};
     }
     const ap=(d.appliances||[]).find(a=>a.id===active.applianceId);
     const watts=parseFloat(ap?.watts)||parseFloat(active.watts)||0,qty=parseFloat(ap?.qty)||parseFloat(active.qty)||1,kwh=watts*qty*(minutes/60)/1000;
     const startDt=new Date(active.startedAt);
-    const entry={id:uid(),applianceId:active.applianceId,name:ap?.name||active.name,category:ap?.category||active.category||'Others',date:dateOf(startDt),start:timeOf(startDt),end:timeOf(now),minutes,hours:minutes/60,watts,qty,kwh,cost:kwh*rate,rateAtTime:rate};
+    const entry={id:uid(),applianceId:active.applianceId,name:ap?.name||active.name,category:ap?.category||active.category||'Others',date:dateOf(startDt),start:timeOf(startDt),end:timeOf(now),startedAt:startDt.toISOString(),endedAt:now.toISOString(),minutes,hours:minutes/60,watts,qty,kwh,cost:kwh*rate,rateAtTime:rate};
     return{...d,activeSessions,applianceUsage:[entry,...(d.applianceUsage||[])]};
   });
 }
@@ -1182,8 +1212,9 @@ function saveEdit(){
     const watts=parseFloat(dr.watts)||0,qty=parseFloat(dr.qty)||1;
     const sessionMinutes=dr.alwaysOn?0:(parseFloat(dr.sessionMinutes)||0);
     if(!dr.name||!watts||(!dr.alwaysOn&&!sessionMinutes))return;
-    const alwaysOnSince=dr.alwaysOn?(old?.alwaysOn&&old?.alwaysOnSince?old.alwaysOnSince:new Date().toISOString()):'';
-    setD(d=>({...d,appliances:(d.appliances||[]).map(x=>x.id===id?{...x,...dr,watts,qty,hoursPerDay:dr.alwaysOn?24:0,daysPerMonth:dr.alwaysOn?30:0,sessionMinutes,alwaysOn:!!dr.alwaysOn,alwaysOnSince}:x)}));
+    const nowIso=new Date().toISOString();
+    const alwaysOnSince=dr.alwaysOn?(old?.alwaysOn&&old?.alwaysOnSince?old.alwaysOnSince:nowIso):'';
+    setD(d=>({...d,appliances:(d.appliances||[]).map(x=>x.id===id?{...x,...dr,createdAt:x.createdAt||old.createdAt||nowIso,watts,qty,hoursPerDay:dr.alwaysOn?24:0,daysPerMonth:dr.alwaysOn?30:0,sessionMinutes,alwaysOn:!!dr.alwaysOn,alwaysOnSince}:x)}));
   } else if(t==='applianceUsage'){
     const old=(S.data.applianceUsage||[]).find(x=>x.id===id);
     const appliance=(S.data.appliances||[]).find(a=>a.id===(dr.applianceId||old.applianceId));
@@ -1328,15 +1359,27 @@ function balanceToggleBtn(extraCls=''){
     : '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m3 3 18 18"/><path d="M10.6 6.2A10.8 10.8 0 0 1 12 6c6.5 0 10 6 10 6a17.9 17.9 0 0 1-3.1 3.7"/><path d="M6.5 6.8C3.6 8.7 2 12 2 12s3.5 6 10 6a9.9 9.9 0 0 0 4.2-.9"/><path d="M9.9 9.9a3 3 0 0 0 4.2 4.2"/></svg>';
   return btn;
 }
-function dateBadge(date){
+function dateBadgeClass(date){
   const dt=dtOf(date),week=Math.min(5,Math.max(1,Math.ceil(dt.getDate()/7)));
-  return Sp(`bdg bdg-w${week}`,dt.toLocaleDateString('en-PH',{month:'short',day:'numeric'}));
+  return `bdg bdg-w${week}`;
+}
+function dateBadge(date){
+  const dt=dtOf(date);
+  return Sp(dateBadgeClass(date),dt.toLocaleDateString('en-PH',{month:'short',day:'numeric'}));
 }
 function dateSpanLabel(u){
   const start=u.startDate||u.date,end=u.endDate||u.date;
   if(!end||end===start)return dateBadge(start);
   const s=dtOf(start),e=dtOf(end),sameYear=s.getFullYear()===e.getFullYear();
-  return Sp('bdg bdg-w3',`${s.toLocaleDateString('en-PH',{month:'short',day:'numeric'})}-${e.toLocaleDateString('en-PH',{month:'short',day:'numeric',...(sameYear?{}:{year:'numeric'})})}`);
+  return Sp(dateBadgeClass(start),`${s.toLocaleDateString('en-PH',{month:'short',day:'numeric'})}-${e.toLocaleDateString('en-PH',{month:'short',day:'numeric',...(sameYear?{}:{year:'numeric'})})}`);
+}
+function auditDateBadge(r){
+  if(r.dateLabel)return Sp(r.dateClass||'bdg bdg-w3',r.dateLabel);
+  if(r.date&&r.date!=='whole window')return dateBadge(r.date);
+  return Sp(r.dateClass||'bdg bdg-w3','Audit Window');
+}
+function auditDateText(r){
+  return r.dateLabel||((r.date&&r.date!=='whole window')?r.date:'Meter window');
 }
 function logSortDate(u){return u?.endDate||u?.date||'';}
 function metaLine(parts=[],date){
@@ -1389,29 +1432,50 @@ function swRow(content,onEdit,onDel,onOff){
   const sc=D('swc');sc.appendChild(content);
   wrap.appendChild(acts);wrap.appendChild(sc);
   const AW=(onOff?62:0)+(onEdit?62:0)+62;
-  let sx=0,sy=0,gk=false,ih=false;
-  sc.addEventListener('touchstart',e=>{sx=e.touches[0].clientX;sy=e.touches[0].clientY;gk=false;ih=false;sc.style.transition='none';},{passive:true});
-  sc.addEventListener('touchmove',e=>{
-    const dx=e.touches[0].clientX-sx,dy=e.touches[0].clientY-sy;
+  let sx=0,sy=0,gk=false,ih=false,mouseDown=false,mouseDragged=false;
+  const moveSwipe=(x,y,prevent)=>{
+    const dx=x-sx,dy=y-sy;
     if(!gk&&(Math.abs(dx)>4||Math.abs(dy)>4)){ih=Math.abs(dx)>Math.abs(dy);gk=true;}
     if(!ih)return;
-    e.preventDefault();
+    if(prevent)prevent();
     const isOpen=openSw===wrap;
     const base=isOpen?-AW:0;
     const off=Math.max(Math.min(base+dx,0),-AW);
     sc.style.transform=`translateX(${off}px)`;
     if(dx<0&&openSw&&openSw!==wrap)closeSwipe();
-  },{passive:false});
-  sc.addEventListener('touchend',e=>{
+  };
+  const endSwipe=(x)=>{
     if(!ih)return;
     sc.style.transition='transform .15s ease';
-    const dx=e.changedTouches[0].clientX-sx;
+    const dx=x-sx;
     const isOpen=openSw===wrap;
     if(!isOpen&&dx<-40){sc.style.transform=`translateX(-${AW}px)`;openSw=wrap;}
     else if(isOpen&&dx>40){sc.style.transform='';openSw=null;}
     else if(!isOpen){sc.style.transform='';}
     else{sc.style.transform=`translateX(-${AW}px)`;}
+  };
+  sc.addEventListener('touchstart',e=>{sx=e.touches[0].clientX;sy=e.touches[0].clientY;gk=false;ih=false;sc.style.transition='none';},{passive:true});
+  sc.addEventListener('touchmove',e=>{
+    moveSwipe(e.touches[0].clientX,e.touches[0].clientY,()=>e.preventDefault());
+  },{passive:false});
+  sc.addEventListener('touchend',e=>{
+    endSwipe(e.changedTouches[0].clientX);
   },{passive:true});
+  sc.addEventListener('pointerdown',e=>{
+    if(e.pointerType!=='mouse'||e.button!==0)return;
+    sx=e.clientX;sy=e.clientY;gk=false;ih=false;mouseDown=true;mouseDragged=false;sc.style.transition='none';sc.setPointerCapture?.(e.pointerId);
+  });
+  sc.addEventListener('pointermove',e=>{
+    if(!mouseDown||e.pointerType!=='mouse')return;
+    moveSwipe(e.clientX,e.clientY,()=>e.preventDefault());
+    if(ih)mouseDragged=true;
+  });
+  sc.addEventListener('pointerup',e=>{
+    if(!mouseDown||e.pointerType!=='mouse')return;
+    mouseDown=false;endSwipe(e.clientX);sc.releasePointerCapture?.(e.pointerId);
+  });
+  sc.addEventListener('pointercancel',e=>{if(e.pointerType==='mouse')mouseDown=false;});
+  sc.addEventListener('click',e=>{if(mouseDragged){e.preventDefault();e.stopPropagation();mouseDragged=false;}},true);
   return wrap;
 }
 
@@ -1455,7 +1519,9 @@ function renderDrawer(){
   const dov=D('dov'+(S.drawerOpen?' show':''));
   dov.onclick=()=>set({drawerOpen:false});
   const dhdr=D('dr-hdr');
-  dhdr.appendChild(h('img',{cls:'dr-logo',src:'Kipr-logo-cropped.png',alt:'kipr'}));
+  const logoBtn=h('button',{cls:'dr-logo-btn',type:'button',onClick:()=>set({tab:'dash',drawerOpen:false}),'aria-label':'Go to Overview'});
+  logoBtn.appendChild(h('img',{cls:'dr-logo',src:'Kipr-logo-cropped.png',alt:'kipr'}));
+  dhdr.appendChild(logoBtn);
   drawer.appendChild(dhdr);
   const items=D('dr-items');
   const drItem=(icon,lbl,sub,fn,active)=>{
@@ -1515,7 +1581,7 @@ function renderDash(){
   balLine.appendChild(bv);balLine.appendChild(balanceToggleBtn('bal-toggle-hero'));
   const bs=D('');bs.style.cssText='font-size:11px;color:rgba(255,255,255,.55);margin-top:2px;line-height:1.45';bs.textContent=`Avg monthly expenses ${fmt(Math.round(avgMonthlyExpense))}${historyMonths?` from ${historyMonths} month${historyMonths!==1?'s':''}`:''} · ~${runwayMonths.toFixed(1)} months runway`;
   hl.appendChild(balLine);hl.appendChild(bs);
-  const eb=h('button',{cls:'btn bg',style:'color:rgba(255,255,255,.85);border-color:rgba(255,255,255,.25);padding:5px 10px;font-size:11px',onClick:()=>set({balInput:String(data.balance),modal:'editBal'})},'Edit ✏️');
+  const eb=h('button',{cls:'btn bg',style:'color:rgba(255,255,255,.85);border-color:rgba(255,255,255,.25);padding:5px 10px;font-size:11px',onClick:()=>set({balInput:String(data.balance),modal:'editBal'})},'Edit');
   hrow.appendChild(hl);hrow.appendChild(eb);hcp.appendChild(hrow);
   const rrow=D('row');rrow.style.marginBottom='4px';rrow.innerHTML=`<span style="font-size:10px;color:rgba(255,255,255,.45)">Runway vs 12 months</span><span style="font-size:10px;color:rgba(255,255,255,.45)">${runwayMonths.toFixed(1)} / 12</span>`;
   const rb=D('rbar');const rf=D('rf');rf.style.cssText=`width:${rwPct}%;background:${rwCol}`;rb.appendChild(rf);
@@ -1577,13 +1643,13 @@ function renderDash(){
     allTx.forEach(tx=>{
       const row=D('row cr');row.style.cssText='border-bottom:1px solid #e8e0d5;justify-content:flex-start;gap:9px';
       const left=D('');left.style.cssText='flex:1;min-width:0';
-      const nm=D('');nm.style.cssText='font-size:12.5px;font-weight:600';nm.textContent=tx.type==='food'?tx.source:tx.name;
-      const info=D('');info.style.cssText='font-size:10.5px;color:#8a7260;margin-top:1px;display:flex;align-items:flex-start;gap:4px;line-height:1.35';
+      const nm=D('');nm.style.cssText='font-size:12.5px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.25';nm.textContent=tx.type==='food'?tx.source:tx.name;
+      const info=D('');info.style.cssText='font-size:10.5px;color:#8a7260;margin-top:2px;display:flex;align-items:center;gap:5px;line-height:1.35;min-width:0;flex-wrap:wrap';
       const bcls=tx.type==='food'?'bdg-f':tx.type==='home'?'bdg-h':'bdg-a';
       info.appendChild(Sp('bdg '+bcls,tx.type==='food'?'Food':tx.type==='home'?'Home':'Aircon'));
       info.appendChild(dateBadge(tx.date));
       const noteText=tx.type==='home'?noteParts(tx.store,tx.note):tx.note;
-      if(noteText)info.appendChild(h('span',{style:'min-width:0'},noteText));
+      if(noteText)info.appendChild(h('span',{style:'min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:100%'},noteText));
       left.appendChild(nm);left.appendChild(info);
       const right=D('');right.style.cssText='display:flex;align-items:center;gap:6px;flex-shrink:0';
       if(!(tx.type==='food'&&isHomeCookedTx(tx))){
@@ -2161,18 +2227,38 @@ function renderMeterAudit(){
     parts.appendChild(box);
   });
   cp.appendChild(parts);
+  const shortDate=dt=>dt.toLocaleDateString('en-PH',{month:'short',day:'numeric'});
+  const rangeLabel=(s,e)=>shortDate(s)===shortDate(e)?shortDate(s):`${shortDate(s)}-${shortDate(e)}`;
+  const auditInfo=(u)=>{
+    const r=usageDateRange(u,a.start,a.end);
+    if(!r)return{minutes:0,dateLabel:u.date?shortDate(dtOf(u.date)):'',dateClass:u.date?dateBadgeClass(u.date):'',time:'date only',sortAt:u.date?dtOf(u.date).getTime():0};
+    const os=new Date(Math.max(r.s,a.start)),oe=new Date(Math.min(r.e,a.end));
+    const minutes=Math.max(0,Math.round((oe-os)/60000));
+    const hasExactTime=!!(u.start||u.end||u.startDate||u.endDate||u.startedAt||u.endedAt);
+    const badgeDate=hasExactTime?dateOf(os):u.date;
+    return{
+      minutes:hasExactTime?minutes:(parseFloat(u.minutes)||minutes),
+      dateLabel:hasExactTime?rangeLabel(os,oe):shortDate(dtOf(u.date)),
+      dateClass:dateBadgeClass(badgeDate),
+      time:hasExactTime?`${fmtTime12(timeOf(os))}-${fmtTime12(timeOf(oe))}`:'date only',
+      sortAt:(hasExactTime?oe:dtOf(u.date)).getTime()
+    };
+  };
   const rows=[
-    ...a.aircon.map(u=>({type:'Aircon',name:`${airconModeLabel(u.mode,u.sleepMode)} · ${durationLabel(u.minutes||(u.hours||0)*60)}`,date:u.date,time:u.start&&u.end?`${fmtTime12(u.start)}-${fmtTime12(u.end)}`:'date only',kwh:u.kwh})),
-    ...a.tv.map(u=>({type:'TV',name:durationLabel(u.minutes||(u.hours||0)*60),date:u.date,time:u.start&&u.end?`${fmtTime12(u.start)}-${fmtTime12(u.end)}`:'date only',kwh:u.kwh})),
-    ...a.appliances.map(u=>({type:'Appliance',name:`${u.name} · ${durationLabel(u.minutes)}`,date:u.date,time:u.start&&u.end?`${fmtTime12(u.start)}-${fmtTime12(u.end)}`:'date only',kwh:u.kwh})),
-    ...a.alwaysRows.map(u=>({type:'24/7',name:u.name,date:'whole window',time:`${parseFloat(u.watts)||0}W x ${parseFloat(u.qty)||1}`,kwh:u.kwh}))
-  ].sort((x,y)=>String(x.date).localeCompare(String(y.date))||String(x.time).localeCompare(String(y.time)));
+    ...a.aircon.map(u=>{const info=auditInfo(u);return{type:'Aircon',name:`${airconModeLabel(u.mode,u.sleepMode)} · ${durationLabel(info.minutes)}`,date:u.date,dateLabel:info.dateLabel,dateClass:info.dateClass,time:info.time,sortAt:info.sortAt,kwh:usageKwhInRange(u,a.start,a.end)};}),
+    ...a.tv.map(u=>{const info=auditInfo(u);return{type:'TV',name:durationLabel(info.minutes),date:u.date,dateLabel:info.dateLabel,dateClass:info.dateClass,time:info.time,sortAt:info.sortAt,kwh:usageKwhInRange(u,a.start,a.end)};}),
+    ...a.appliances.map(u=>{const info=auditInfo(u);return{type:'Appliance',name:`${u.name} · ${durationLabel(info.minutes)}`,date:u.date,dateLabel:info.dateLabel,dateClass:info.dateClass,time:info.time,sortAt:info.sortAt,kwh:auditApplianceKwhInRange(u,a.start,a.end)};}),
+    ...a.alwaysRows.map(u=>({type:'24/7',name:`${u.name} · ${durationLabel(a.hours*60)}`,date:'whole window',dateLabel:rangeLabel(a.start,a.end),dateClass:dateBadgeClass(dateOf(a.start)),time:`${parseFloat(u.watts)||0}W x ${parseFloat(u.qty)||1}`,sortAt:a.end.getTime(),kwh:u.kwh}))
+  ].sort((x,y)=>(y.sortAt||0)-(x.sortAt||0)||String(y.time).localeCompare(String(x.time)));
   const list=D('');list.style.marginTop='8px';
   rows.forEach(r=>{
     const row=D('row');row.style.cssText='border-top:1px solid #e8e0d5;padding:7px 0;gap:8px;align-items:flex-start';
     const left=D('');left.style.cssText='flex:1;min-width:0';
     left.appendChild(h('div',{style:'font-size:12px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis'},`${r.type} · ${r.name}`));
-    left.appendChild(h('div',{style:'font-size:10px;color:#8a7260'},`${r.date} · ${r.time}`));
+    const meta=D('');meta.style.cssText='font-size:10px;color:#8a7260;margin-top:2px;display:flex;align-items:center;gap:5px;flex-wrap:wrap;line-height:1.35';
+    meta.appendChild(auditDateBadge(r));
+    meta.appendChild(h('span',{},r.time));
+    left.appendChild(meta);
     row.appendChild(left);
     row.appendChild(h('div',{cls:'sf',style:'font-size:13px;flex-shrink:0'},`${(parseFloat(r.kwh)||0).toFixed(3)} kWh`));
     list.appendChild(row);
@@ -3138,6 +3224,7 @@ const SCREEN_LABELS={dash:'Overview',food:'Food Expenses',home:'Home & Toiletrie
 function render(){
   ensureLiveTick();
   openSw=null;
+  rememberContentScroll();
   const root=document.getElementById('app');root.innerHTML='';
   document.body.classList.add('app-ready');
   root.style.background='#f4f0ea';
@@ -3174,6 +3261,7 @@ function render(){
   content.style.minHeight = '0';
   content.style.overflowY = 'auto';
   content.dataset.tab = S.tab;
+  content.addEventListener('scroll',()=>{scrollByTab[S.tab]=content.scrollTop;},{passive:true});
   app.appendChild(content);
 
   // Tab bar (always visible)
@@ -3188,6 +3276,11 @@ function render(){
   app.appendChild(tb);
   const modal=renderModal();if(modal)app.appendChild(modal);
   root.appendChild(app);
+  if(scrollByTab[S.tab]){
+    const top=scrollByTab[S.tab];
+    content.scrollTop=top;
+    requestAnimationFrame(()=>{content.scrollTop=top;});
+  }
   const splash=document.getElementById('splash');
   if(splash&&!splash.classList.contains('splash-hide')){
     splash.classList.add('splash-hide');
