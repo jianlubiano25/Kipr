@@ -179,6 +179,16 @@ input[type="date"],input[type="time"]{
 .aerr{background:#fdecea;color:#b83030;font-size:12px;padding:10px 14px;border-radius:10px;margin-bottom:9px;line-height:1.5;border:1px solid #f5c2c2}
 .tip-r{display:flex;gap:9px;padding:7px 0;border-bottom:1px solid #e8e0d5;align-items:flex-start}
 .tip-r:last-child{border-bottom:none}
+.dash-tips-toggle{width:100%;display:flex;align-items:center;justify-content:space-between;gap:12px;background:#f8f4ef;border:0;border-bottom:1px solid #e8e0d5;padding:10px 13px;cursor:pointer;text-align:left}
+.dash-tips-toggle:active{background:#f2ebe2}
+.dash-tips-body{padding-top:8px;padding-bottom:8px}
+.appliance-profile-toggle{width:100%;display:flex;align-items:center;justify-content:space-between;gap:10px;background:#f8f4ef;border:0;border-bottom:1px solid #e8e0d5;padding:9px 13px;cursor:pointer;text-align:left}
+.appliance-profile-toggle:active{background:#f2ebe2}
+.history-toggle{width:100%;display:flex;align-items:center;justify-content:space-between;gap:10px;background:#f8f4ef;border:0;border-bottom:1px solid #e8e0d5;padding:9px 13px;cursor:pointer;text-align:left}
+.history-toggle:active{background:#f2ebe2}
+.electric-chart-actions-section{display:grid;grid-template-columns:1fr;gap:10px;margin-bottom:10px}
+.electric-chart-actions-section > .card,
+.electric-chart-actions-section > .electric-actions-grid{margin-bottom:0 !important;min-width:0}
 
 /* ─── BADGES ─────────────────────────────────────────────────── */
 .bdg{display:inline-block;font-size:9px;font-weight:800;padding:2px 6px;border-radius:8px;letter-spacing:.2px;white-space:nowrap;flex-shrink:0}
@@ -278,6 +288,15 @@ input[type="date"],input[type="time"]{
   .rpt-bar-row{gap:6px}
   .rpt-bar-label{width:96px}
   .rpt-bar-val{width:58px}
+  .sec[data-tab="dash"] .dash-quick-actions{
+    display:grid !important;
+    grid-template-columns:repeat(2,minmax(0,1fr));
+    gap:8px !important;
+  }
+  .sec[data-tab="dash"] .dash-quick-actions > .dash-log-food-btn{
+    grid-column:1 / -1;
+    margin-bottom:0 !important;
+  }
 }
 
 /* ══════════════════════════════════════════════════════════════
@@ -312,17 +331,25 @@ input[type="date"],input[type="time"]{
   .dr-hdr{padding:26px 22px 22px}
 }
 
-/* ─── iPad Pro portrait, including 12.9" at 1024px wide ─────── */
-@media (min-width:900px) and (orientation:portrait){
+/* ─── iPad portrait ─────────────────────────────────────────── */
+@media (min-width:768px) and (orientation:portrait){
   #app{max-width:100%}
 
   .sec{
-    padding:20px 28px 28px;
+    padding:18px 22px 26px;
     display:grid;
     grid-template-columns:repeat(2,minmax(0,1fr));
-    gap:14px;
+    gap:12px;
     align-content:start;
+    grid-auto-rows:max-content;
   }
+
+  .card{margin-bottom:0}
+}
+
+/* ─── iPad Pro portrait, including 12.9" at 1024px wide ─────── */
+@media (min-width:900px) and (orientation:portrait){
+  .sec{padding:20px 28px 28px;gap:14px}
 }
 
 /* ─── iPad landscape ─────────────────────────────────────────── */
@@ -361,8 +388,8 @@ input[type="date"],input[type="time"]{
   .mt{font-size:21px}
 }
 
-/* Shared tablet grid rules. Rows, filters, heroes, charts, and action
-   groups stay wide so they do not become awkward half-width controls. */
+/* Shared tablet grid rules. Keep primary rows/heroes wide, while letting
+   secondary summaries and action groups use the tablet columns. */
 @media (min-width:900px) and (orientation:portrait),
        (min-width:1024px) and (orientation:landscape){
   .sec > .row,
@@ -374,20 +401,71 @@ input[type="date"],input[type="time"]{
   .sec > .aerr,
   .sec > p,
   .sec > button.btn,
-  .sec > .qtip,
-  .sec > [style*="grid-template"],
-  .sec > [style*="display:grid"],
-  .sec > [style*="display: grid"],
-  .sec > [style*="display:flex"][style*="gap"]{
+  .sec > .qtip{
     grid-column:1 / -1;
   }
 
   .sec > .card{min-width:0}
+  .sec > [style*="grid-template"],
+  .sec > [style*="display:grid"],
+  .sec > [style*="display: grid"],
+  .sec > [style*="display:flex"][style*="gap"]{min-width:0;margin-bottom:0 !important}
+  .sec[data-tab="dash"] > .g2,
+  .sec[data-tab="aircon"] > .g2,
+  .sec[data-tab="lists"] > [style*="display:grid"]{grid-column:auto}
+  .sec[data-tab="dash"] > [style*="grid-template-columns:repeat(3"],
+  .sec[data-tab="aircon"] > [style*="grid-template-columns:1fr 1fr"],
+  .sec[data-tab="aircon"] > [style*="grid-template-columns: 1fr 1fr"],
+  .sec[data-tab="appliances"] > [style*="grid-template-columns:1fr 1fr"],
+  .sec[data-tab="appliances"] > [style*="grid-template-columns: 1fr 1fr"]{grid-column:auto}
+  .sec[data-tab="dash"] > button.btn{grid-column:auto;margin-bottom:0 !important}
+  .sec[data-tab="reports"] > .card:not(.cg),
+  .sec[data-tab="aircon"] > .card:not(.cg),
+  .sec[data-tab="dash"] > .card:not(.cg){align-self:start}
   .rpt-bar-row{gap:10px}
   .rpt-bar-label{width:150px}
+  .cp{padding:12px 13px}
+  .sf[style*="font-size:32px"],
+  .sf[style*="font-size:33px"]{font-size:28px !important}
+  .sf[style*="font-size:30px"]{font-size:26px !important}
+  .bw{height:60px}
+  .bbg{height:42px}
   .weather-body{gap:18px}
-  .weather-art{width:104px}
-  .wv{height:72px}
+  .weather-art{width:92px}
+  .wv{height:64px}
+}
+
+@media (min-width:768px) and (max-width:899px) and (orientation:portrait){
+  .sec > .row,
+  .sec > .chips,
+  .sec > .card.cg,
+  .sec > .empty,
+  .sec > .aerr,
+  .sec > p,
+  .sec > .qtip{
+    grid-column:1 / -1;
+  }
+
+  .sec > [style*="display:grid"],
+  .sec > [style*="display: grid"],
+  .sec > [style*="grid-template"],
+  .sec > [style*="display:flex"][style*="gap"]{min-width:0;margin-bottom:0 !important}
+  .sec > .card{min-width:0}
+  .sec[data-tab="dash"] > button.btn{grid-column:auto;margin-bottom:0 !important}
+  .sec[data-tab="dash"] > .g2,
+  .sec[data-tab="aircon"] > .g2,
+  .sec[data-tab="lists"] > [style*="display:grid"]{grid-column:auto}
+  .cp{padding:11px 12px}
+  .sf[style*="font-size:32px"],
+  .sf[style*="font-size:33px"]{font-size:27px !important}
+  .sf[style*="font-size:30px"]{font-size:25px !important}
+  .bw{height:58px}
+  .bbg{height:40px}
+  .weather-body{gap:14px}
+  .weather-art{width:84px}
+  .wv{height:58px}
+  .rpt-bar-label{width:118px}
+  .rpt-bar-val{width:60px}
 }
 
 /* ─── iPad Pro 12.9" landscape ──────────────────────────────── */
@@ -407,4 +485,190 @@ input[type="date"],input[type="time"]{
   }
   .htitle{font-size:24px}
   .hbv{font-size:27px}
+}
+
+/* ─── Dashboard wide-screen tuning ──────────────────────────── */
+@media (min-width:768px) and (orientation:portrait),
+       (min-width:1024px){
+  .sec[data-tab="dash"]{
+    grid-template-columns:1.25fr 1.15fr .68fr;
+    align-items:start;
+  }
+
+  .sec[data-tab="dash"] > .dash-top-section,
+  .sec[data-tab="dash"] > .dash-ops-section,
+  .sec[data-tab="dash"] > .dash-activity-section,
+  .sec[data-tab="dash"] > .dash-budget-tips-card{
+    grid-column:1 / -1;
+    min-width:0;
+  }
+
+  .dash-top-section{
+    display:grid;
+    grid-template-columns:1.25fr 1.15fr .68fr;
+    gap:12px;
+    align-items:start;
+  }
+
+  .dash-top-section > .dash-meal-grocery-grid{
+    display:grid;
+    grid-template-columns:1fr;
+    grid-template-rows:repeat(2,max-content);
+    gap:8px;
+    margin-bottom:0 !important;
+  }
+
+  .dash-top-section > .dash-meal-grocery-grid > .card > .cp{
+    padding:9px 10px;
+  }
+
+  .dash-top-section > .dash-meal-grocery-grid .sf{
+    font-size:18px !important;
+    line-height:1.08;
+  }
+
+  .dash-top-section > .dash-meal-grocery-grid .lbl{
+    font-size:8.5px;
+    letter-spacing:.45px;
+  }
+
+  .dash-top-section > .dash-meal-grocery-grid .cp > div:last-child{
+    font-size:9.5px !important;
+    line-height:1.25;
+  }
+
+  .dash-ops-section{
+    display:grid;
+    grid-template-columns:1.25fr 1.83fr;
+    gap:12px;
+    align-items:stretch;
+  }
+
+  .dash-ops-section > .dash-electricity-stack{
+    display:grid;
+    grid-template-columns:1fr;
+    gap:10px;
+    align-self:start;
+  }
+
+  .dash-ops-section > .dash-currently-on-card{
+    align-self:stretch;
+    max-height:240px;
+    overflow-y:auto;
+  }
+
+  .dash-ops-section > .dash-currently-on-card .empty{
+    padding:10px 12px !important;
+  }
+
+  .dash-activity-section{
+    display:grid;
+    grid-template-columns:1fr 2fr;
+    gap:12px;
+    align-items:start;
+  }
+
+  .dash-activity-section > .dash-chart-expenses-stack{
+    grid-column:1 / -1;
+    grid-row:1;
+    display:grid;
+    grid-template-columns:1fr;
+    gap:12px;
+  }
+
+  .dash-activity-section > .dash-quick-actions{
+    grid-column:1 / 2;
+    grid-row:2;
+    display:grid !important;
+    grid-template-columns:1fr;
+    gap:8px !important;
+    align-self:start;
+    margin-bottom:0 !important;
+  }
+
+  .dash-activity-section > .dash-quick-actions > .dash-log-food-btn{
+    margin-bottom:0 !important;
+  }
+
+  .dash-activity-section > .dash-recent-meals-card{
+    grid-column:1 / 2;
+    grid-row:3;
+  }
+
+  .dash-activity-section > .dash-recent-expenses-card{
+    grid-column:2 / 3;
+    grid-row:2 / 4;
+  }
+
+  .sec[data-tab="dash"] > .dash-budget-tips-card{
+    margin-bottom:0 !important;
+  }
+}
+
+/* ─── Electricity wide-screen tuning ────────────────────────── */
+@media (min-width:768px) and (orientation:portrait),
+       (min-width:1024px){
+  .sec[data-tab="aircon"]{
+    align-items:start;
+  }
+
+  .sec[data-tab="aircon"] > .electric-summary-section,
+  .sec[data-tab="aircon"] > .electric-audit-section,
+  .sec[data-tab="aircon"] > .electric-chart-actions-section,
+  .sec[data-tab="aircon"] > .electric-appliance-audit-section{
+    grid-column:1 / -1;
+    min-width:0;
+  }
+
+  .electric-summary-section{
+    display:grid;
+    grid-template-columns:1fr 1fr;
+    gap:12px;
+    align-items:start;
+  }
+
+  .electric-summary-section > .card,
+  .electric-metrics-grid > .card{
+    margin-bottom:0;
+    min-width:0;
+  }
+
+  .electric-metrics-grid{
+    grid-column:1 / -1;
+    display:grid;
+    grid-template-columns:repeat(3,minmax(0,1fr));
+    gap:8px;
+    min-width:0;
+  }
+
+  .electric-metrics-grid > .card > .cp{
+    padding:10px 11px;
+  }
+
+  .electric-metrics-grid .sf{
+    font-size:18px !important;
+    line-height:1.08;
+  }
+
+  .electric-chart-actions-section{
+    display:grid;
+    grid-template-columns:1fr 1fr;
+    gap:12px;
+    align-items:start;
+  }
+
+  .electric-appliance-audit-section{
+    display:grid;
+    grid-template-columns:1fr 1fr;
+    gap:12px;
+    align-items:start;
+  }
+
+  .electric-appliance-audit-section > .meter-audit-card{
+    align-self:start;
+  }
+
+  .electric-appliance-audit-section > .meter-audit-card > .row{
+    min-height:0;
+  }
 }
