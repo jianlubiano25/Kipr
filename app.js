@@ -425,6 +425,7 @@ function weatherSummary(w=S?.data?.weather){
   if(codeLabel)parts.push(codeLabel);
   if(w.apparent!=null)parts.push(`Feels ${Number(w.apparent).toFixed(1)}C`);
   if(w.humidity!=null)parts.push(`Humidity ${Math.round(w.humidity)}%`);
+  if(weatherIsNight(w))parts.push(moonPhaseLabel(w.time));
   if(w.time)parts.push(`Updated ${fmtTime12(String(w.time).slice(11,16))}`);
   return parts.join(' · ')||'Weather not loaded';
 }
@@ -452,10 +453,41 @@ function weatherVisualType(code){
   if([1,2,3].includes(c))return 'cloud';
   return 'clear';
 }
+function weatherIsNight(w){
+  if(w?.isDay!==undefined&&w?.isDay!==null)return Number(w.isDay)===0;
+  const hh=parseInt(String(w?.time||'').slice(11,13));
+  return !isNaN(hh)&&(hh<6||hh>=18);
+}
+function moonPhaseClass(time){
+  const d=time?new Date(time):new Date();
+  const days=(Date.UTC(d.getUTCFullYear(),d.getUTCMonth(),d.getUTCDate())-Date.UTC(2000,0,6))/86400000;
+  const phase=((days%29.53058867)+29.53058867)%29.53058867;
+  if(phase<1.85||phase>27.68)return 'moon-new';
+  if(phase<5.54)return 'moon-wax-crescent';
+  if(phase<9.23)return 'moon-first-quarter';
+  if(phase<12.92)return 'moon-wax-gibbous';
+  if(phase<16.61)return 'moon-full';
+  if(phase<20.3)return 'moon-wane-gibbous';
+  if(phase<23.99)return 'moon-last-quarter';
+  return 'moon-wane-crescent';
+}
+function moonPhaseLabel(time){
+  return {
+    'moon-new':'New Moon',
+    'moon-wax-crescent':'Waxing Crescent',
+    'moon-first-quarter':'First Quarter',
+    'moon-wax-gibbous':'Waxing Gibbous',
+    'moon-full':'Full Moon',
+    'moon-wane-gibbous':'Waning Gibbous',
+    'moon-last-quarter':'Last Quarter',
+    'moon-wane-crescent':'Waning Crescent'
+  }[moonPhaseClass(time)]||'Moon';
+}
 function weatherVisual(w){
-  const wrap=D(`wv ${weatherVisualType(w?.code)}`);
+  const night=weatherIsNight(w);
+  const wrap=D(`wv ${weatherVisualType(w?.code)} ${night?'night':'day'} ${night?moonPhaseClass(w?.time):''}`);
   wrap.setAttribute('aria-hidden','true');
-  wrap.innerHTML='<div class="wv-glow"></div><div class="wv-sun"><span></span></div><div class="wv-cloud wv-cloud-a"></div><div class="wv-cloud wv-cloud-b"></div><div class="wv-rain wv-rain-a"></div><div class="wv-rain wv-rain-b"></div><div class="wv-rain wv-rain-c"></div><div class="wv-rain wv-rain-d"></div><div class="wv-bolt"></div><div class="wv-fog wv-fog-a"></div><div class="wv-fog wv-fog-b"></div><div class="wv-fog wv-fog-c"></div>';
+  wrap.innerHTML='<div class="wv-stars"><i></i><i></i><i></i><i></i><i></i></div><div class="wv-glow"></div><div class="wv-sun"><span></span></div><div class="wv-moon"><span></span></div><div class="wv-cloud wv-cloud-a"></div><div class="wv-cloud wv-cloud-b"></div><div class="wv-rain wv-rain-a"></div><div class="wv-rain wv-rain-b"></div><div class="wv-rain wv-rain-c"></div><div class="wv-rain wv-rain-d"></div><div class="wv-rain wv-rain-e"></div><div class="wv-rain wv-rain-f"></div><div class="wv-bolt"></div><div class="wv-fog wv-fog-a"></div><div class="wv-fog wv-fog-b"></div><div class="wv-fog wv-fog-c"></div>';
   return wrap;
 }
 function renderWeatherCard(data=S.data,{title='Weather'}={}){
@@ -578,6 +610,7 @@ function ld(){try{const s=localStorage.getItem(SK);if(s){const d=JSON.parse(s);i
   if(!d.airconModel)d.airconModel=AIRCON_MODEL_PROFILE.model;if(!d.airconTempBaseline)d.airconTempBaseline=29;if(!d.airconTempStepPct)d.airconTempStepPct=7;if(!d.airconOutdoorBaseline)d.airconOutdoorBaseline=30;if(!d.airconOutdoorStepPct)d.airconOutdoorStepPct=2.5;
   if(!d.airconOutdoorModel)d.airconOutdoorModel=AIRCON_MODEL_PROFILE.outdoorModel;if(!d.airconCoolingKw)d.airconCoolingKw=AIRCON_MODEL_PROFILE.coolingKw;if(!d.airconRatedWatts)d.airconRatedWatts=AIRCON_MODEL_PROFILE.ratedWatts;if(!d.airconMinWatts)d.airconMinWatts=AIRCON_MODEL_PROFILE.minWatts;if(!d.airconMaxWatts)d.airconMaxWatts=AIRCON_MODEL_PROFILE.maxWatts;if(!d.airconCspf)d.airconCspf=AIRCON_MODEL_PROFILE.cspf;if(!d.airconDoeMonthlyKwh)d.airconDoeMonthlyKwh=AIRCON_MODEL_PROFILE.doeMonthlyKwh;
   if(!d.weatherProvider)d.weatherProvider=DEFAULT_WEATHER.provider;if(!d.weatherLabel)d.weatherLabel=DEFAULT_WEATHER.label;if(!d.weatherLat)d.weatherLat=DEFAULT_WEATHER.lat;if(!d.weatherLon)d.weatherLon=DEFAULT_WEATHER.lon;if(!d.weatherElevation)d.weatherElevation=DEFAULT_WEATHER.elevation;
+  if(d.darkMode===undefined)d.darkMode=false;
   if(d.airconDefaultSleepMode===undefined)d.airconDefaultSleepMode=true;if(!d.airconDefaultMode)d.airconDefaultMode=d.airconDefaultSleepMode===false?'normal':'sleep';if(d.airconDefaultTemp===undefined)d.airconDefaultTemp='29';
   const out=normalizeBalance(mergeDaily24hApplianceLogs(d));if(out._mergedDaily24hDeletedIds?.length)sd(out);return out;}}catch{}return JSON.parse(JSON.stringify(INIT));}
 function sd(d){try{localStorage.setItem(SK,JSON.stringify(d));}catch{}}
@@ -834,11 +867,11 @@ async function updateWeather(force=false){
   if(ws.provider!=='open-meteo')return;
   S.weatherLoading=true;S.weatherErr='';render();
   try{
-    const url=`https://api.open-meteo.com/v1/forecast?latitude=${encodeURIComponent(ws.lat)}&longitude=${encodeURIComponent(ws.lon)}&current=temperature_2m,relative_humidity_2m,apparent_temperature,wind_speed_10m,weather_code&timezone=Asia%2FManila&forecast_days=1`;
+    const url=`https://api.open-meteo.com/v1/forecast?latitude=${encodeURIComponent(ws.lat)}&longitude=${encodeURIComponent(ws.lon)}&current=temperature_2m,relative_humidity_2m,apparent_temperature,wind_speed_10m,weather_code,is_day&timezone=Asia%2FManila&forecast_days=1`;
     const res=await fetch(url);
     if(!res.ok)throw new Error('Weather request failed');
     const json=await res.json(),cur=json.current||{};
-    const weather={source:'Open-Meteo',label:ws.label,lat:ws.lat,lon:ws.lon,modelLat:json.latitude,modelLon:json.longitude,elevation:json.elevation??ws.elevation,temp:cur.temperature_2m,humidity:cur.relative_humidity_2m,apparent:cur.apparent_temperature,wind:cur.wind_speed_10m,code:cur.weather_code,time:cur.time,fetchedAt:new Date().toISOString()};
+    const weather={source:'Open-Meteo',label:ws.label,lat:ws.lat,lon:ws.lon,modelLat:json.latitude,modelLon:json.longitude,elevation:json.elevation??ws.elevation,temp:cur.temperature_2m,humidity:cur.relative_humidity_2m,apparent:cur.apparent_temperature,wind:cur.wind_speed_10m,code:cur.weather_code,isDay:cur.is_day,time:cur.time,fetchedAt:new Date().toISOString()};
     S.weatherLoading=false;S.weatherErr='';
     setD(d=>({...d,weather}));
   }catch(e){
@@ -1085,7 +1118,7 @@ function saveAirconProfile(){
 }
 function openSettings(){
   const ws=weatherSettings(S.data);
-  set({modal:'settings',drawerOpen:false,settingsF:{geminiKey:S.geminiKey,weatherProvider:ws.provider,weatherLabel:ws.label,weatherLat:String(ws.lat),weatherLon:String(ws.lon),weatherElevation:String(ws.elevation),weatherApiKey:ws.apiKey||''}});
+  set({modal:'settings',drawerOpen:false,settingsF:{geminiKey:S.geminiKey,darkMode:!!S.data.darkMode,weatherProvider:ws.provider,weatherLabel:ws.label,weatherLat:String(ws.lat),weatherLon:String(ws.lon),weatherElevation:String(ws.elevation),weatherApiKey:ws.apiKey||''}});
 }
 function openListsDefaults(){
   const d=S.data;
@@ -1116,7 +1149,7 @@ function saveSettings(){
   const old=weatherSettings(S.data);
   const next={provider:f.weatherProvider||'open-meteo',label:f.weatherLabel||DEFAULT_WEATHER.label,lat:parseFloat(f.weatherLat)||DEFAULT_WEATHER.lat,lon:parseFloat(f.weatherLon)||DEFAULT_WEATHER.lon,elevation:parseFloat(f.weatherElevation)||DEFAULT_WEATHER.elevation,apiKey:f.weatherApiKey||''};
   const changed=old.lat!==next.lat||old.lon!==next.lon||old.provider!==next.provider;
-  setD(d=>({...d,weatherProvider:next.provider,weatherLabel:next.label,weatherLat:next.lat,weatherLon:next.lon,weatherElevation:next.elevation,weatherApiKey:next.apiKey,weather:changed?null:d.weather}));
+  setD(d=>({...d,darkMode:!!f.darkMode,weatherProvider:next.provider,weatherLabel:next.label,weatherLat:next.lat,weatherLon:next.lon,weatherElevation:next.elevation,weatherApiKey:next.apiKey,weather:changed?null:d.weather}));
   set({geminiKey:key,modal:null,weatherErr:''});
   setTimeout(()=>updateWeather(true),50);
 }
@@ -1348,6 +1381,43 @@ function h(tag,attrs,...ch){
 }
 const D=(cls,...c)=>h('div',{cls},...c);
 const Sp=(cls,t)=>h('span',{cls},t);
+const ICONS={
+  overview:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 11.5 12 4l9 7.5"/><path d="M5 10.5V20h14v-9.5"/><path d="M9.5 20v-5h5v5"/></svg>',
+  food:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 3v8"/><path d="M4.5 3v5.5a2.5 2.5 0 0 0 5 0V3"/><path d="M7 11v10"/><path d="M16.5 3v18"/><path d="M16.5 3c2.2 1.6 3.5 3.9 3.5 6.5 0 2.2-1.2 3.5-3.5 3.5"/></svg>',
+  home:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 21h16"/><path d="M6 21V9.5L12 5l6 4.5V21"/><path d="M9 21v-6h6v6"/></svg>',
+  bills:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 4h8"/><path d="M9 2h6v4H9z"/><path d="M6 5h12v16H6z"/><path d="M9 11h6"/><path d="M9 15h6"/></svg>',
+  prices:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 13 13 20 4 11V4h7l9 9Z"/><path d="M7.5 7.5h.01"/></svg>',
+  scan:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8V5a1 1 0 0 1 1-1h3"/><path d="M16 4h3a1 1 0 0 1 1 1v3"/><path d="M20 16v3a1 1 0 0 1-1 1h-3"/><path d="M8 20H5a1 1 0 0 1-1-1v-3"/><path d="M8 10h8"/><path d="M8 14h6"/></svg>',
+  electric:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m13 2-8 12h6l-1 8 8-12h-6l1-8Z"/></svg>',
+  appliance:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7V3"/><path d="M17 7V3"/><path d="M8 7h8a3 3 0 0 1 3 3v3a7 7 0 0 1-14 0v-3a3 3 0 0 1 3-3Z"/><path d="M12 20v2"/></svg>',
+  reports:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h16"/><path d="M7 16V9"/><path d="M12 16V5"/><path d="M17 16v-3"/></svg>',
+  stocks:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 8 4.5v9L12 21l-8-4.5v-9L12 3Z"/><path d="m4 7.5 8 4.5 8-4.5"/><path d="M12 12v9"/></svg>',
+  upload:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 16V4"/><path d="m7 9 5-5 5 5"/><path d="M5 20h14"/></svg>',
+  download:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v12"/><path d="m7 11 5 5 5-5"/><path d="M5 20h14"/></svg>',
+  cloud:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M17.5 18H8a5 5 0 1 1 .8-9.9A6.5 6.5 0 0 1 21 11.5 3.5 3.5 0 0 1 17.5 18Z"/></svg>',
+  settings:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8Z"/><path d="M12 2v3"/><path d="M12 19v3"/><path d="m4.93 4.93 2.12 2.12"/><path d="m16.95 16.95 2.12 2.12"/><path d="M2 12h3"/><path d="M19 12h3"/><path d="m4.93 19.07 2.12-2.12"/><path d="m16.95 7.05 2.12-2.12"/></svg>',
+  menu:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16"/><path d="M4 12h16"/><path d="M4 17h16"/></svg>',
+  sun:'<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/></svg>',
+  moon:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20.4 14.5A8.3 8.3 0 0 1 9.5 3.6 8.3 8.3 0 1 0 20.4 14.5Z"/></svg>',
+  edit:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5Z"/></svg>',
+  trash:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M6 7l1 14h10l1-14"/><path d="M9 7V4h6v3"/></svg>',
+  camera:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8h4l2-3h4l2 3h4v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg>',
+  search:'<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>',
+  close:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12"/><path d="M18 6 6 18"/></svg>',
+  check:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12 4 4L19 6"/></svg>',
+  warning:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 10 18H2L12 3Z"/><path d="M12 9v5"/><path d="M12 17h.01"/></svg>'
+};
+function iconEl(name,cls='app-icon'){
+  const el=h('span',{cls});
+  el.innerHTML=ICONS[name]||ICONS.overview;
+  return el;
+}
+function iconLabel(icon,label){
+  const frag=document.createDocumentFragment();
+  frag.appendChild(iconEl(icon,'btn-icon app-icon'));
+  frag.appendChild(document.createTextNode(label));
+  return frag;
+}
 const balanceDisplay=n=>S.balanceHidden?'₱••••••':fmt(n);
 function balanceToggleBtn(extraCls=''){
   const btn=h('button',{
@@ -1386,26 +1456,36 @@ function auditDateText(r){
 }
 function logSortDate(u){return u?.endDate||u?.date||'';}
 function metaLine(parts=[],date){
-  const meta=D('');meta.style.cssText='font-size:10.5px;color:#8a7260;margin-top:2px;display:flex;align-items:center;gap:5px;flex-wrap:wrap;line-height:1.35';
+  const meta=D('meta-line');
   if(date)meta.appendChild(dateBadge(date));
-  parts.filter(Boolean).forEach(p=>meta.appendChild(h('span',{style:'min-width:0'},p)));
+  parts.filter(Boolean).forEach(p=>meta.appendChild(h('span',{cls:'meta-clip'},p)));
   return meta;
 }
 const metaParts=(...parts)=>noteParts(...parts).split(' · ').filter(Boolean);
 const Btn=(cls,t,fn,dis)=>h('button',{cls:'btn '+cls,onClick:fn,...(dis?{disabled:true}:{})},t);
+const BtnI=(cls,ic,t,fn,dis)=>Btn(cls,iconLabel(ic,t),fn,dis);
 const Inp=(cls,opts)=>h('input',{cls:'inp '+cls,...opts});
 const Sel=(val,opts,fn,cls='')=>{const el=h('select',{cls:'sel '+cls});opts.forEach(o=>{const op=h('option',{value:o},o);if(o===val)op.selected=true;el.appendChild(op);});el.addEventListener('change',e=>fn(e.target.value));return el;};
-const Fg=(lbl,el,sub)=>{const f=D('fg');f.appendChild(h('label',{cls:'fl'},lbl));f.appendChild(el);if(sub)f.appendChild(h('div',{style:'font-size:10px;color:#8a7260;margin-top:2px'},sub));return f;};
+const Fg=(lbl,el,sub)=>{const f=D('fg');f.appendChild(h('label',{cls:'fl'},lbl));f.appendChild(el);if(sub)f.appendChild(h('div',{cls:'tiny-muted',style:'margin-top:2px'},sub));return f;};
 const Mr=(...bs)=>{const r=D('mr');bs.forEach(b=>r.appendChild(b));return r;};
-const DivHdr=(t)=>{const d=D('');d.style.cssText='padding:8px 13px;background:#f8f4ef;border-bottom:1px solid #e8e0d5';d.appendChild(h('span',{style:'font-weight:700;font-size:13px'},t));return d;};
+const DivHdr=(t)=>{const d=D('section-hdr');d.appendChild(h('span',{cls:'section-hdr-title'},t));return d;};
+function EmptyCard(icon,title){
+  const e=D('card empty');
+  e.appendChild(iconEl(icon,'empty-icon app-icon'));
+  e.appendChild(h('div',{},title));
+  return e;
+}
 function metricTiles(items,compact=false){
-  const grid=D('');
-  grid.style.cssText=`display:grid;grid-template-columns:repeat(${items.length},minmax(0,1fr));gap:${compact?'4px':'6px'};margin-top:${compact?'6px':'8px'}`;
+  const grid=D('metric-grid');
+  grid.style.setProperty('--metric-count',items.length);
+  grid.style.setProperty('--metric-gap',compact?'4px':'6px');
+  grid.style.setProperty('--metric-top',compact?'6px':'8px');
   items.forEach(it=>{
-    const tile=D('');
-    tile.style.cssText=`background:#f8f4ef;border:1px solid #e8e0d5;border-radius:8px;padding:${compact?'5px 4px':'7px 6px'};min-width:0;text-align:center`;
-    tile.appendChild(h('div',{style:`font-size:${compact?'7.5px':'8.5px'};color:#8a7260;font-weight:800;text-transform:uppercase;letter-spacing:.25px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis`},it.label));
-    tile.appendChild(h('div',{cls:'sf',style:`font-size:${compact?'10.5px':'13px'};color:${it.color||'#3a2818'};margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis`},it.value));
+    const tile=D('metric-tile'+(compact?' metric-tile-compact':''));
+    tile.appendChild(h('div',{cls:'metric-label'+(compact?' metric-label-compact':'')},it.label));
+    const value=h('div',{cls:'sf metric-value'+(compact?' metric-value-compact':'')},it.value);
+    if(it.color)value.style.color=it.color;
+    tile.appendChild(value);
     grid.appendChild(tile);
   });
   return grid;
@@ -1430,8 +1510,8 @@ function swRow(content,onEdit,onDel,onOff){
   const wrap=D('sw');
   const acts=D('swa');
   if(onOff){const ob=h('button',{cls:'sw-off',onClick:(e)=>{e.stopPropagation();closeSwipe();onOff();}});ob.innerHTML='⏻<span style="font-size:10px">Off</span>';acts.appendChild(ob);}
-  if(onEdit){const eb=h('button',{cls:'sw-edit',onClick:(e)=>{e.stopPropagation();closeSwipe();onEdit();}});eb.innerHTML='✏️<span style="font-size:10px">Edit</span>';acts.appendChild(eb);}
-  const db=h('button',{cls:'sw-del',onClick:(e)=>{e.stopPropagation();closeSwipe();onDel();}});db.innerHTML='🗑️<span style="font-size:10px">Delete</span>';acts.appendChild(db);
+  if(onEdit){const eb=h('button',{cls:'sw-edit',onClick:(e)=>{e.stopPropagation();closeSwipe();onEdit();}});eb.appendChild(iconEl('edit','sw-action-icon app-icon'));eb.appendChild(h('span',{cls:'sw-action-label'},'Edit'));acts.appendChild(eb);}
+  const db=h('button',{cls:'sw-del',onClick:(e)=>{e.stopPropagation();closeSwipe();onDel();}});db.appendChild(iconEl('trash','sw-action-icon app-icon'));db.appendChild(h('span',{cls:'sw-action-label'},'Delete'));acts.appendChild(db);
   const sc=D('swc');sc.appendChild(content);
   wrap.appendChild(acts);wrap.appendChild(sc);
   const AW=(onOff?62:0)+(onEdit?62:0)+62;
@@ -1518,39 +1598,43 @@ function pGroups(){
 
 // ─── DRAWER ──────────────────────────────────────────────────
 function renderDrawer(){
+  const darkMode=S.modal==='settings'?!!S.settingsF.darkMode:!!S.data.darkMode;
   const drawer=D('drawer'+(S.drawerOpen?' open':''));
   const dov=D('dov'+(S.drawerOpen?' show':''));
   dov.onclick=()=>set({drawerOpen:false});
   const dhdr=D('dr-hdr');
   const logoBtn=h('button',{cls:'dr-logo-btn',type:'button',onClick:()=>set({tab:'dash',drawerOpen:false}),'aria-label':'Go to Overview'});
-  logoBtn.appendChild(h('img',{cls:'dr-logo',src:'Kipr-logo-cropped.png',alt:'kipr'}));
+  logoBtn.appendChild(h('img',{cls:'dr-logo',src:darkMode?'Kipr-logo-lightg.png':'Kipr-logo-org.png',alt:'kipr'}));
   dhdr.appendChild(logoBtn);
+  const themeBtn=h('button',{cls:'drawer-theme-btn',type:'button',title:darkMode?'Switch to light mode':'Switch to dark mode','aria-label':darkMode?'Switch to light mode':'Switch to dark mode',onClick:e=>{e.stopPropagation();setD(d=>({...d,darkMode:!darkMode}));}});
+  themeBtn.appendChild(iconEl(darkMode?'sun':'moon','drawer-theme-icon app-icon'));
+  dhdr.appendChild(themeBtn);
   drawer.appendChild(dhdr);
   const items=D('dr-items');
   const drItem=(icon,lbl,sub,fn,active)=>{
     const it=h('button',{cls:'dr-item'+(active?' dr-item-active':''),onClick:fn});
-    it.appendChild(Object.assign(D('dr-item-icon'),{textContent:icon}));
+    it.appendChild(iconEl(icon,'dr-item-icon app-icon'));
     const tx=D('');tx.appendChild(Object.assign(D('dr-item-lbl'),{textContent:lbl}));if(sub)tx.appendChild(Object.assign(D('dr-item-sub'),{textContent:sub}));it.appendChild(tx);return it;
   };
-  items.appendChild(drItem('🏠','Overview','Dashboard & balance',()=>set({tab:'dash',drawerOpen:false}),S.tab==='dash'));
-  items.appendChild(drItem('🍽️','Food Expenses','Daily meal tracking',()=>set({tab:'food',drawerOpen:false}),S.tab==='food'));
-  items.appendChild(drItem('🧴','Home & Toiletries','Household spending',()=>set({tab:'home',drawerOpen:false}),S.tab==='home'));
-  items.appendChild(drItem('📋','Bills','Monthly bills tracker',()=>set({tab:'bills',drawerOpen:false}),S.tab==='bills'));
-  items.appendChild(drItem('🏷️','Price Comparison','Track & compare prices',()=>set({tab:'prices',drawerOpen:false}),S.tab==='prices'));
-  items.appendChild(drItem('📸','AI Scanner','Scan receipts & tags',()=>set({tab:'scan',drawerOpen:false}),S.tab==='scan'));
-  items.appendChild(drItem('⚡','Electricity Usage','Appliances, aircon & TV',()=>set({tab:'aircon',drawerOpen:false}),S.tab==='aircon'));
-  items.appendChild(drItem('🔌','Appliance Manager','Add, edit, delete appliances',()=>set({tab:'appliances',drawerOpen:false}),S.tab==='appliances'));
+  items.appendChild(drItem('overview','Overview','Dashboard & balance',()=>set({tab:'dash',drawerOpen:false}),S.tab==='dash'));
+  items.appendChild(drItem('food','Food Expenses','Daily meal tracking',()=>set({tab:'food',drawerOpen:false}),S.tab==='food'));
+  items.appendChild(drItem('home','Home & Toiletries','Household spending',()=>set({tab:'home',drawerOpen:false}),S.tab==='home'));
+  items.appendChild(drItem('bills','Bills','Monthly bills tracker',()=>set({tab:'bills',drawerOpen:false}),S.tab==='bills'));
+  items.appendChild(drItem('prices','Price Comparison','Track & compare prices',()=>set({tab:'prices',drawerOpen:false}),S.tab==='prices'));
+  items.appendChild(drItem('scan','AI Scanner','Scan receipts & tags',()=>set({tab:'scan',drawerOpen:false}),S.tab==='scan'));
+  items.appendChild(drItem('electric','Electricity Usage','Appliances, aircon & TV',()=>set({tab:'aircon',drawerOpen:false}),S.tab==='aircon'));
+  items.appendChild(drItem('appliance','Appliance Manager','Add, edit, delete appliances',()=>set({tab:'appliances',drawerOpen:false}),S.tab==='appliances'));
   items.appendChild(D('dr-sep'));
-  items.appendChild(drItem('📊','Reports','Monthly spending breakdown',()=>set({tab:'reports',drawerOpen:false}),S.tab==='reports'));
-  items.appendChild(drItem('📦','Pantry & Stocks','Track what you have at home',()=>set({tab:'stocks',drawerOpen:false}),S.tab==='stocks'));
+  items.appendChild(drItem('reports','Reports','Monthly spending breakdown',()=>set({tab:'reports',drawerOpen:false}),S.tab==='reports'));
+  items.appendChild(drItem('stocks','Pantry & Stocks','Track what you have at home',()=>set({tab:'stocks',drawerOpen:false}),S.tab==='stocks'));
   items.appendChild(D('dr-sep'));
-  const exp=drItem('📤','Export Data','Save backup to file',exportData);items.appendChild(exp);
-  const imp=drItem('📥','Import Data','Restore from backup',()=>{
+  const exp=drItem('upload','Export Data','Save backup to file',exportData);items.appendChild(exp);
+  const imp=drItem('download','Import Data','Restore from backup',()=>{
     const fi=h('input',{type:'file',accept:'.json',onchange:importData});fi.click();
   });items.appendChild(imp);
   items.appendChild(D('dr-sep'));
-  items.appendChild(drItem('☁️','Cloud Sync',syncLabel(),openSettings,false));
-  items.appendChild(drItem('⚙️','Settings','API keys & location',openSettings,false));
+  items.appendChild(drItem('cloud','Cloud Sync',syncLabel(),openSettings,false));
+  items.appendChild(drItem('settings','Settings','API keys & location',openSettings,false));
   drawer.appendChild(items);
   const frag=document.createDocumentFragment();frag.appendChild(dov);frag.appendChild(drawer);
   return frag;
@@ -1594,7 +1678,7 @@ function renderDash(){
   // Stats
   const g2=D('g2 dash-meal-grocery-grid');g2.style.marginBottom='9px';
   const ob=todayS>data.dailyBudget;
-  const c1=D('card');c1.innerHTML=`<div class="cp"><div class="lbl">Today's Meals</div><div class="sf" style="font-size:23px;color:${ob?'#b83030':'#3a2818'};margin:2px 0">${fmt(todayS)}</div><div style="font-size:10.5px;color:#8a7260">Daily: ${fmt(data.dailyBudget)} · Monthly: ${fmt(data.dailyBudget*30)}</div>${ob?'<div style="font-size:10px;color:#b83030;font-weight:700;margin-top:1px">⚠️ Over budget</div>':''}</div>`;
+  const c1=D('card');c1.innerHTML=`<div class="cp"><div class="lbl">Today's Meals</div><div class="sf" style="font-size:23px;color:${ob?'#b83030':'#3a2818'};margin:2px 0">${fmt(todayS)}</div><div style="font-size:10.5px;color:#8a7260">Daily: ${fmt(data.dailyBudget)} · Monthly: ${fmt(data.dailyBudget*30)}</div>${ob?'<div style="font-size:10px;color:#b83030;font-weight:700;margin-top:1px">Over budget</div>':''}</div>`;
   const c2=D('card');c2.innerHTML=`<div class="cp"><div class="lbl">Groceries This Month</div><div class="sf" style="font-size:23px;color:${groceryMonth>(data.groceryBudget||5000)?'#b83030':'#3a2818'};margin:2px 0">${fmt(groceryMonth)}</div><div style="font-size:10.5px;color:#8a7260">Monthly budget: ${fmt(data.groceryBudget||5000)}</div></div>`;
   g2.appendChild(c1);g2.appendChild(c2);topSection.appendChild(g2);sec.appendChild(topSection);
   const opsSection=D('dash-ops-section');
@@ -1631,17 +1715,17 @@ function renderDash(){
   const lb=Btn('bp bfull dash-log-food-btn','+ Log Food / Expense',()=>set({modal:'addTx',txF:{...S.txF,date:toStr()}}));lb.style.marginBottom='4px';
   // Quick action buttons
   const qa=D('dash-quick-actions');qa.style.cssText='display:flex;gap:8px;margin-bottom:9px';
-  const q1=Btn('bg bfull','🏠 Log Home',()=>set({modal:'addHome',homeF:{...S.homeF,date:toStr()}}));
-  const q2=Btn('bg bfull','📊 Reports',()=>set({tab:'reports'}));
+  const q1=BtnI('bg bfull','home','Log Home',()=>set({modal:'addHome',homeF:{...S.homeF,date:toStr()}}));
+  const q2=BtnI('bg bfull','reports','Reports',()=>set({tab:'reports'}));
   qa.appendChild(lb);qa.appendChild(q1);qa.appendChild(q2);activitySection.appendChild(qa);
   const mealLogs=(data.transactions||[]).filter(isHomeCookedTx).sort((a,b)=>b.date.localeCompare(a.date)).slice(0,5);
   if(mealLogs.length){
-    const mc=D('card dash-recent-meals-card');mc.appendChild(Object.assign(D(''),{style:'padding:8px 13px;border-bottom:1px solid #e8e0d5',innerHTML:'<span class="lbl">Recent Meal Logs</span>'}));
+    const mc=D('card dash-recent-meals-card');mc.appendChild(Object.assign(D('section-hdr'),{innerHTML:'<span class="lbl">Recent Meal Logs</span>'}));
     mealLogs.forEach(tx=>{
-      const row=D('row cr');row.style.borderBottom='1px solid #e8e0d5';
+      const row=D('row cr row-line');
       const left=D('');left.style.cssText='flex:1;min-width:0';
-      left.appendChild(h('div',{style:'font-size:13px;font-weight:700;color:#3a2818;line-height:1.25'},`Home-cooked${tx.note?' · '+tx.note:''}`));
-      const info=D('');info.style.cssText='font-size:10.5px;color:#8a7260;margin-top:2px;display:flex;align-items:center;gap:4px';
+      left.appendChild(h('div',{cls:'row-main'},`Home-cooked${tx.note?' · '+tx.note:''}`));
+      const info=D('meta-line');info.style.gap='4px';
       info.appendChild(Sp('bdg bdg-f','Meal Log'));
       info.appendChild(dateBadge(tx.date));
       left.appendChild(info);
@@ -1653,17 +1737,17 @@ function renderDash(){
   const paidFood=(data.transactions||[]).filter(t=>!isHomeCookedTx(t));
   const allTx=[...paidFood.slice(0,6).map(t=>({...t,type:'food'})),...(data.homeExpenses||[]).slice(0,4).map(t=>({...t,type:'home'}))].sort((a,b)=>b.date.localeCompare(a.date)).slice(0,8);
   if(allTx.length){
-    const rc=D('card dash-recent-expenses-card');rc.appendChild(Object.assign(D(''),{style:'padding:8px 13px;border-bottom:1px solid #e8e0d5',innerHTML:'<span class="lbl">Recent Expenses</span>'}));
+    const rc=D('card dash-recent-expenses-card');rc.appendChild(Object.assign(D('section-hdr'),{innerHTML:'<span class="lbl">Recent Expenses</span>'}));
     allTx.forEach(tx=>{
-      const row=D('row cr');row.style.cssText='border-bottom:1px solid #e8e0d5;justify-content:flex-start;gap:9px';
+      const row=D('row cr row-line');row.style.cssText='justify-content:flex-start;gap:9px';
       const left=D('');left.style.cssText='flex:1;min-width:0';
-      const nm=D('');nm.style.cssText='font-size:12.5px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.25';nm.textContent=tx.type==='food'?tx.source:tx.name;
-      const info=D('');info.style.cssText='font-size:10.5px;color:#8a7260;margin-top:2px;display:flex;align-items:center;gap:5px;line-height:1.35;min-width:0;flex-wrap:wrap';
+      const nm=D('row-main');nm.style.cssText='font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis';nm.textContent=tx.type==='food'?tx.source:tx.name;
+      const info=D('meta-line');
       const bcls=tx.type==='food'?'bdg-f':tx.type==='home'?'bdg-h':'bdg-a';
       info.appendChild(Sp('bdg '+bcls,tx.type==='food'?'Food':tx.type==='home'?'Home':'Aircon'));
       info.appendChild(dateBadge(tx.date));
       const noteText=tx.type==='home'?noteParts(tx.store,tx.note):tx.note;
-      if(noteText)info.appendChild(h('span',{style:'min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:100%'},noteText));
+      if(noteText)info.appendChild(h('span',{cls:'meta-clip'},noteText));
       left.appendChild(nm);left.appendChild(info);
       const right=D('');right.style.cssText='display:flex;align-items:center;gap:6px;flex-shrink:0';
       if(!(tx.type==='food'&&isHomeCookedTx(tx))){
@@ -1700,12 +1784,12 @@ function renderFood(){
   mw.appendChild(h('span',{style:'font-size:11px;font-weight:700;color:#8a7260'},'Month:'));
   const allM=months.length?months:[curMk()];
   const msel=Sel(S.viewMk,allM,v=>set({viewMk:v}));
-  msel.style.cssText='padding:5px 9px;font-size:12px;border-radius:7px;border:1.5px solid #e8e0d5;background:#fff';
+  msel.classList.add('compact-select');
   [...msel.options].forEach(o=>{o.text=mklbl(o.value);});
   mw.appendChild(msel);toprow.appendChild(mw);
   const fa=D('');fa.style.cssText='display:flex;gap:6px';
   if(S.multiFood){fa.appendChild(Btn('bgsm','Edit',()=>openBatchEdit('food'),!S.selFood.size));fa.appendChild(Btn('bgsm','Delete',()=>delSelected('food'),!S.selFood.size));fa.appendChild(Btn('bgsm','Done',()=>clearMulti('food')));}
-  else {fa.appendChild(Btn('bgsm','Select',()=>set({multiFood:true,selFood:new Set()})));fa.appendChild(Btn('bgsm','📦 Pantry',()=>set({tab:'stocks'})));fa.appendChild(Btn('bp bsm','+ Add',()=>set({modal:'addTx',txF:{...S.txF,date:toStr()}})));}
+  else {fa.appendChild(Btn('bgsm','Select',()=>set({multiFood:true,selFood:new Set()})));fa.appendChild(BtnI('bgsm','stocks','Pantry',()=>set({tab:'stocks'})));fa.appendChild(Btn('bp bsm','+ Add',()=>set({modal:'addTx',txF:{...S.txF,date:toStr()}})));}
   toprow.appendChild(fa);sec.appendChild(toprow);
   const mTx=data.transactions.filter(t=>mk(t.date)===S.viewMk);
   const homeCookedTx=mTx.filter(isHomeCookedTx),expenseTx=mTx.filter(t=>!isHomeCookedTx(t));
@@ -1714,14 +1798,14 @@ function renderFood(){
   const mDays=[...new Set(mealTx.map(t=>t.date))].length;
   const msc=D('card cg');msc.style.marginBottom='9px';msc.innerHTML=`<div class="cp"><div class="row" style="margin-bottom:9px"><div><div class="lblw">Food Spending — ${mklbl(S.viewMk)}</div><div class="sf" style="font-size:28px;color:#fff;margin:2px 0">${fmt(mTotal)}</div><div style="font-size:11px;color:rgba(255,255,255,.55)">${expenseTx.length} expense${expenseTx.length!==1?'s':''} · ${homeCookedTx.length} meal log${homeCookedTx.length!==1?'s':''}</div></div><div style="text-align:right"><div class="lblw">Meal Avg/Day</div><div class="sf" style="font-size:20px;color:#fff;margin-top:3px">${fmt(mDays?Math.round(mealTotal/mDays):0)}</div></div></div><div style="display:grid;grid-template-columns:1fr 1fr;gap:6px"><div style="background:rgba(255,255,255,.1);border-radius:8px;padding:7px"><div class="lblw">Meals</div><div class="sf" style="font-size:16px;color:#fff">${fmt(mealTotal)}</div></div><div style="background:rgba(255,255,255,.1);border-radius:8px;padding:7px"><div class="lblw">Groceries</div><div class="sf" style="font-size:16px;color:${groceryTotal>(data.groceryBudget||5000)?'#ffd07a':'#fff'}">${fmt(groceryTotal)}</div><div style="font-size:9.5px;color:rgba(255,255,255,.55)">Budget ${fmt(data.groceryBudget||5000)}</div></div></div></div>`;
   sec.appendChild(msc);
-  if(!mTx.length){const e=D('card empty');e.innerHTML='<div style="font-size:34px;margin-bottom:7px">🍽️</div><div>No food expenses logged for this month.</div>';sec.appendChild(e);return sec;}
+  if(!mTx.length){sec.appendChild(EmptyCard('food','No food expenses logged for this month.'));return sec;}
   if(homeCookedTx.length){
     const mc=D('card');mc.appendChild(DivHdr('Meal Logs'));
     homeCookedTx.sort((a,b)=>b.date.localeCompare(a.date)).forEach(tx=>{
-      const inner=D('row cr');inner.style.cssText='border-bottom:1px solid #e8e0d5;justify-content:flex-start;gap:9px';
+      const inner=D('row cr row-line');inner.style.cssText='justify-content:flex-start;gap:9px';
       if(S.multiFood)inner.appendChild(h('input',{type:'checkbox',checked:S.selFood.has(tx.id),style:'width:18px;height:18px;flex:0 0 18px',onClick:e=>{e.stopPropagation();toggleSel('food',tx.id);}}));
       const left=D('');left.style.cssText='flex:1;min-width:0';
-      left.appendChild(h('div',{style:'font-size:13px;font-weight:700;color:#3a2818;line-height:1.25'},`Home-cooked${tx.note?' · '+tx.note:''}`));
+      left.appendChild(h('div',{cls:'row-main'},`Home-cooked${tx.note?' · '+tx.note:''}`));
       left.appendChild(metaLine([],tx.date));
       inner.appendChild(left);
       mc.appendChild(S.multiFood?inner:swRow(inner,()=>openEdit('food',tx.id),()=>delTx(tx.id)));
@@ -1732,16 +1816,16 @@ function renderFood(){
   Object.keys(grouped).sort((a,b)=>b.localeCompare(a)).forEach(ds=>{
     const txs=grouped[ds],total=txs.reduce((s,t)=>s+t.amount,0),mealTotal=txs.filter(t=>!isGroceryTx(t)).reduce((s,t)=>s+t.amount,0),groceryTotal=txs.filter(isGroceryTx).reduce((s,t)=>s+t.amount,0),over=mealTotal>data.dailyBudget;
     const card=D('card');
-    const hdr=D('row');hdr.style.cssText='padding:8px 13px;background:#f8f4ef;border-bottom:1px solid #e8e0d5';
-    hdr.appendChild(h('span',{style:'font-weight:700;font-size:12.5px'},new Date(ds+'T12:00:00').toLocaleDateString('en-PH',{weekday:'short',month:'short',day:'numeric'})));
-    hdr.appendChild(h('span',{cls:'sf',style:`font-size:16px;color:${over?'#b83030':'#2e6e4f'}`},`${fmt(mealTotal)} meals${groceryTotal?' · '+fmt(groceryTotal)+' grocery':''}${over?' ⚠️':''}`));
+    const hdr=D('row section-hdr');
+    hdr.appendChild(h('span',{cls:'section-hdr-title'},new Date(ds+'T12:00:00').toLocaleDateString('en-PH',{weekday:'short',month:'short',day:'numeric'})));
+    hdr.appendChild(h('span',{cls:'sf',style:`font-size:16px;color:${over?'#b83030':'#2e6e4f'}`},`${fmt(mealTotal)} meals${groceryTotal?' · '+fmt(groceryTotal)+' grocery':''}${over?' · Over':''}`));
     card.appendChild(hdr);
     txs.forEach(tx=>{
-      const inner=D('row cr');inner.style.borderBottom='1px solid #e8e0d5';
+      const inner=D('row cr row-line');
       inner.style.justifyContent='flex-start';inner.style.gap='9px';
       if(S.multiFood)inner.appendChild(h('input',{type:'checkbox',checked:S.selFood.has(tx.id),style:'width:18px;height:18px;flex:0 0 18px',onClick:e=>{e.stopPropagation();toggleSel('food',tx.id);}}));
       const left=D('');left.style.cssText='flex:1;min-width:0';
-      left.appendChild(h('div',{style:'font-size:12px;font-weight:600'},tx.source));
+      left.appendChild(h('div',{cls:'row-main-sm'},tx.source));
       left.appendChild(metaLine([tx.note,tx.discount?`Discount ${fmt(tx.discount)}`:''],tx.date));
       const right=D('');right.style.cssText='display:flex;align-items:center;gap:6px;flex-shrink:0';
       right.appendChild(h('span',{style:'font-weight:700;font-size:13px'},fmt(tx.amount)));
@@ -1769,12 +1853,12 @@ function renderHome(){
   mw.appendChild(h('span',{style:'font-size:11px;font-weight:700;color:#8a7260'},'Month:'));
   const allM=months.length?months:[curMk()];
   const msel=Sel(S.viewMk,allM,v=>set({viewMk:v}));
-  msel.style.cssText='padding:5px 9px;font-size:12px;border-radius:7px;border:1.5px solid #e8e0d5;background:#fff';
+  msel.classList.add('compact-select');
   [...msel.options].forEach(o=>{o.text=mklbl(o.value);});
   mw.appendChild(msel);toprow.appendChild(mw);
   const ha=D('');ha.style.cssText='display:flex;gap:6px';
   if(S.multiHome){ha.appendChild(Btn('bgsm','Edit',()=>openBatchEdit('home'),!S.selHome.size));ha.appendChild(Btn('bgsm','Delete',()=>delSelected('home'),!S.selHome.size));ha.appendChild(Btn('bgsm','Done',()=>clearMulti('home')));}
-  else {ha.appendChild(Btn('bgsm','Select',()=>set({multiHome:true,selHome:new Set()})));ha.appendChild(Btn('bgsm','📦 Stocks',()=>set({tab:'stocks'})));ha.appendChild(Btn('bp bsm','+ Add',()=>set({modal:'addHome',homeF:{...S.homeF,date:toStr()}})));}
+  else {ha.appendChild(Btn('bgsm','Select',()=>set({multiHome:true,selHome:new Set()})));ha.appendChild(BtnI('bgsm','stocks','Stocks',()=>set({tab:'stocks'})));ha.appendChild(Btn('bp bsm','+ Add',()=>set({modal:'addHome',homeF:{...S.homeF,date:toStr()}})));}
   toprow.appendChild(ha);sec.appendChild(toprow);
   const chips=D('chips');['All',...homeCategories()].forEach(cat=>{const c=D('chip'+(S.homeCat===cat?' chip-on':''));c.textContent=cat;c.onclick=()=>set({homeCat:cat});chips.appendChild(c);});sec.appendChild(chips);
   const mExp=expenses.filter(e=>mk(e.date)===S.viewMk);
@@ -1782,20 +1866,20 @@ function renderHome(){
   const msc=D('card cg');msc.style.marginBottom='9px';msc.innerHTML=`<div class="cp"><div class="lblw">Home & Toiletries — ${mklbl(S.viewMk)}</div><div class="sf" style="font-size:28px;color:#fff;margin:2px 0">${fmt(mTotal)}</div><div style="font-size:11px;color:rgba(255,255,255,.55)">${mExp.length} item${mExp.length!==1?'s':''}</div></div>`;
   sec.appendChild(msc);
   const filtered=mExp.filter(e=>S.homeCat==='All'||e.category===S.homeCat);
-  if(!filtered.length){const e=D('card empty');e.innerHTML=`<div style="font-size:34px;margin-bottom:7px">🧴</div><div>No home expenses${S.homeCat!=='All'?' for '+S.homeCat:''} this month.</div>`;sec.appendChild(e);return sec;}
+  if(!filtered.length){sec.appendChild(EmptyCard('home',`No home expenses${S.homeCat!=='All'?' for '+S.homeCat:''} this month.`));return sec;}
   const byCat=filtered.reduce((acc,e)=>{if(!acc[e.category])acc[e.category]=[];acc[e.category].push(e);return acc;},{});
   Object.entries(byCat).sort().forEach(([cat,items])=>{
     const total=items.reduce((s,e)=>s+e.amount,0);
-    const card=D('card');const hdr=D('row');hdr.style.cssText='padding:8px 13px;background:#f8f4ef;border-bottom:1px solid #e8e0d5';
-    hdr.appendChild(h('span',{style:'font-weight:700;font-size:13px'},cat));
+    const card=D('card');const hdr=D('row section-hdr');
+    hdr.appendChild(h('span',{cls:'section-hdr-title'},cat));
     hdr.appendChild(h('span',{cls:'sf',style:'font-size:16px;color:#1a56c4'},fmt(total)));
     card.appendChild(hdr);
     items.sort((a,b)=>b.date.localeCompare(a.date)).forEach(item=>{
-      const inner=D('row cr');inner.style.borderBottom='1px solid #e8e0d5';
+      const inner=D('row cr row-line');
       inner.style.justifyContent='flex-start';inner.style.gap='9px';
       if(S.multiHome)inner.appendChild(h('input',{type:'checkbox',checked:S.selHome.has(item.id),style:'width:18px;height:18px;flex:0 0 18px',onClick:e=>{e.stopPropagation();toggleSel('home',item.id);}}));
       const left=D('');left.style.cssText='flex:1;min-width:0';
-      const nm=D('');nm.style.cssText='font-size:12px;font-weight:600';nm.textContent=item.name;
+      const nm=D('row-main-sm');nm.textContent=item.name;
       const qty=parseFloat(item.qty)||1,unitPrice=parseFloat(item.unitPrice)||item.amount;
       const details=metaParts(item.store,item.note,item.discount?'Discount '+fmt(item.discount):'',qty>1?`${qty} x ${fmt(unitPrice)}`:'');
       left.appendChild(nm);
@@ -1819,17 +1903,17 @@ function renderPrices(){
     const q=v.toLowerCase();
     sec.querySelectorAll('[data-price-group]').forEach(el=>{el.style.display=el.dataset.priceGroup.includes(q)?'':'none';});
   };
-  const si=Inp('',{type:'text',placeholder:'🔍 Search item...',value:S.pSearch});si.style.flex='1';si.oninput=e=>applySearch(e.target.value);
+  const si=Inp('',{type:'text',placeholder:'Search item...',value:S.pSearch});si.style.flex='1';si.oninput=e=>applySearch(e.target.value);
   srow.appendChild(si);srow.appendChild(Btn('bp bsm','+ Add',()=>set({modal:'addPrice'})));sec.appendChild(srow);
   const chips=D('chips');['All','Food','Home & Toiletries'].forEach(cat=>{const c=D('chip'+(S.pCat===cat?' chip-on':''));c.textContent=cat;c.onclick=()=>set({pCat:cat});chips.appendChild(c);});sec.appendChild(chips);
-  if(!groups.length){const e=D('card empty');e.innerHTML='<div style="font-size:34px;margin-bottom:7px">🏷️</div><div>No prices tracked yet.<br/>Add items or use AI Scan!</div>';sec.appendChild(e);return sec;}
+  if(!groups.length){sec.appendChild(EmptyCard('prices','No prices tracked yet. Add items or use AI Scan!'));return sec;}
   groups.forEach(group=>{
-    const card=D('card');card.dataset.priceGroup=group.display.toLowerCase();if(S.pSearch&&!card.dataset.priceGroup.includes(S.pSearch.toLowerCase()))card.style.display='none';const hdr=D('');hdr.style.cssText='padding:7px 13px;background:#f8f4ef;border-bottom:1px solid #e8e0d5';
-    const hn=D('');hn.style.cssText='font-weight:700;font-size:13px;text-transform:capitalize';hn.textContent=group.display;hdr.appendChild(hn);
+    const card=D('card');card.dataset.priceGroup=group.display.toLowerCase();if(S.pSearch&&!card.dataset.priceGroup.includes(S.pSearch.toLowerCase()))card.style.display='none';const hdr=D('section-hdr-tight');
+    const hn=D('section-hdr-title');hn.style.textTransform='capitalize';hn.textContent=group.display;hdr.appendChild(hn);
     if(group.items.length>1){const gs=D('');gs.style.cssText='font-size:10.5px;color:#2e6e4f;font-weight:700;margin-top:1px';gs.textContent=`Save ${fmt(group.items[group.items.length-1].price-group.items[0].price)} by choosing cheapest`;hdr.appendChild(gs);}
     card.appendChild(hdr);
     group.items.forEach((item,idx)=>{
-      const inner=D('row cr');inner.style.cssText=`border-bottom:1px solid #e8e0d5;background:${idx===0?'#edf8f2':'#fff'}`;
+      const inner=D('row cr row-line'+(idx===0?' row-highlight':''));
       const left=D('');
       if(idx===0){const t=D('');t.style.marginBottom='2px';t.appendChild(Sp('tag-c','CHEAPEST'));left.appendChild(t);}
       const st=D('');st.style.cssText='font-size:12px;color:#8a7260';st.textContent=item.store;
@@ -1851,9 +1935,9 @@ function renderScan(){
   cp.appendChild(h('span',{cls:'sf',style:'font-size:17px;display:block;margin-bottom:4px'},'📸 AI Scan'));
   cp.appendChild(h('p',{style:'font-size:12px;color:#8a7260;line-height:1.6;margin-bottom:12px'},'Upload a receipt, order screenshot, price tag, menu, or market sign. Save results to food expenses, home expenses, or price comparison.'));
   if(S.geminiKey){
-    cp.appendChild(Object.assign(D('qtip'),{innerHTML:'<strong>⚡ Gemini Limits:</strong> Usage is counted per Google Cloud project and per model. The app tries Flash-Lite first, then Flash fallbacks. If quota is reached, wait for the retry time or check AI Studio rate limits.'}));
-    const ok=D('row');ok.style.cssText='background:#e6f3ec;border-radius:8px;padding:6px 11px;margin-bottom:11px';
-    ok.appendChild(h('span',{style:'font-size:11px;color:#2e6e4f;font-weight:700'},'✅ Gemini Active'));
+    cp.appendChild(Object.assign(D('qtip'),{innerHTML:'<strong>Gemini Limits:</strong> Usage is counted per Google Cloud project and per model. The app tries Flash-Lite first, then Flash fallbacks. If quota is reached, wait for the retry time or check AI Studio rate limits.'}));
+    const ok=D('row status-good-panel');
+    ok.appendChild(h('span',{style:'font-size:11px;color:#2e6e4f;font-weight:700'},'Gemini Active'));
     ok.appendChild(h('button',{style:'font-size:10.5px;color:#8a7260;background:none;border:none;cursor:pointer',onClick:openSettings},'Settings'));
     cp.appendChild(ok);
   }else{
@@ -1870,22 +1954,22 @@ function renderScan(){
     catch(err){set({scanErr:'Image error: '+err.message});}
   };
   cp.appendChild(fi);
-  if(!S.scanImg){cp.appendChild(Btn('bp bfull','📷 Choose Photo / Take a Picture',()=>fi.click()));}
+  if(!S.scanImg){cp.appendChild(BtnI('bp bfull','camera','Choose Photo / Take a Picture',()=>fi.click()));}
   else{
     cp.appendChild(h('img',{src:`data:${S.scanMime};base64,${S.scanImg}`,cls:'si'}));
     const br=D('');br.style.cssText='display:flex;gap:7px';
-    const sb=Btn('ba','🔍 '+(S.scanning?'Analyzing...':'Scan Prices'),doScan,S.scanning||!S.geminiKey);sb.style.cssText='flex:1;padding:11px';
-    br.appendChild(sb);br.appendChild(Btn('bgsm','✕',()=>set({scanImg:null,scanData:null,scanErr:'',addedIdx:new Set()})));
+    const sb=BtnI('ba','search',S.scanning?'Analyzing...':'Scan Prices',doScan,S.scanning||!S.geminiKey);sb.style.cssText='flex:1;padding:11px';
+    br.appendChild(sb);br.appendChild(BtnI('bgsm','close','',()=>set({scanImg:null,scanData:null,scanErr:'',addedIdx:new Set()})));
     cp.appendChild(br);
   }
   card.appendChild(cp);sec.appendChild(card);
   if(S.scanErr){const err=D('aerr');err.textContent=S.scanErr;sec.appendChild(err);}
   if(S.scanData!==null){
-    const rc=D('card');rc.appendChild(Object.assign(D(''),{style:'padding:7px 13px;border-bottom:1px solid #e8e0d5',innerHTML:`<span class="lbl">Extracted: ${S.scanData.length} item${S.scanData.length!==1?'s':''}</span>`}));
+    const rc=D('card');rc.appendChild(Object.assign(D('section-hdr-tight'),{innerHTML:`<span class="lbl">Extracted: ${S.scanData.length} item${S.scanData.length!==1?'s':''}</span>`}));
     if(!S.scanData.length)rc.appendChild(Object.assign(D('cp muted'),{style:'text-align:center',textContent:'No prices found. Try a clearer photo.'}));
     else S.scanData.forEach((item,idx)=>{
       const qty=scanQty(item),total=scanTotal(item);
-      const row=D('cr');row.style.cssText='border-bottom:1px solid #e8e0d5;padding:10px 13px';
+      const row=D('cr row-line');row.style.padding='10px 13px';
       const left=D('');left.style.flex='1';
       left.appendChild(h('div',{style:'font-size:12.5px;font-weight:700;text-transform:capitalize'},item.name));
       left.appendChild(h('div',{style:'font-size:10.5px;color:#8a7260'},`${item.store||'Unknown'} · ${item.unit||'pcs'} · ${item.subcat||item.category}${qty>1?' · x'+qty:''}`));
@@ -1913,7 +1997,7 @@ function renderBills(){
   mw.appendChild(h('span',{style:'font-size:11px;font-weight:700;color:#8a7260'},'Month:'));
   const allM=Array.from({length:7},(_,i)=>{const d2=new Date();d2.setMonth(d2.getMonth()-3+i);return mk(dateOf(d2));});
   const msel=Sel(bm,allM,v=>set({billsMk:v}));
-  msel.style.cssText='padding:5px 9px;font-size:12px;border-radius:7px;border:1.5px solid #e8e0d5;background:#fff';
+  msel.classList.add('compact-select');
   [...msel.options].forEach(o=>{o.text=mklbl(o.value);});
   mw.appendChild(msel);toprow.appendChild(mw);toprow.appendChild(Btn('bp bsm','+ Bill',()=>set({modal:'addBill'})));sec.appendChild(toprow);
   const mTotal=data.bills.reduce((s,b)=>s+(b.monthlyAmounts[bm]||0),0);
@@ -1932,39 +2016,39 @@ function renderBills(){
     const diff=est?est.totalKwh-kwh:0;
     const logsPct=est&&kwh?est.totalKwh/kwh*100:0;
     const card=D('card');
-    const hdr=D('row');hdr.style.cssText='padding:9px 13px;background:#f8f4ef;border-bottom:1px solid #e8e0d5';
-    hdr.appendChild(h('span',{style:'font-weight:700;font-size:13px'},bill.name));
+    const hdr=D('row section-hdr');
+    hdr.appendChild(h('span',{cls:'section-hdr-title'},bill.name));
     hdr.appendChild(h('button',{cls:'del',onClick:()=>delBill(bill.id)},'×'));
     card.appendChild(hdr);
     // Amount input — NO re-render on keypress, only on blur
-    const ar=D('row cp');ar.style.borderBottom='1px solid #e8e0d5';
+    const ar=D('row cp row-line');
     ar.appendChild(h('span',{style:'font-size:11.5px;color:#8a7260'},`Amount for ${mklbl(bm)}:`));
     const inputKey=bill.id+'_'+bm;
-    const ai=h('input',{type:'number',inputmode:'decimal',placeholder:'0',style:'width:110px;padding:7px 9px;border-radius:7px;border:1.5px solid #e8e0d5;font-size:14px;font-weight:600;color:#3a2818;text-align:right;font-family:inherit'});
+    const ai=h('input',{type:'number',inputmode:'decimal',placeholder:'0',cls:'amount-input'});
     ai.value=S.billDraft[inputKey]!==undefined?S.billDraft[inputKey]:(amount||'');
     ai.addEventListener('input',e=>{S.billDraft[inputKey]=e.target.value;});  // NO render
     ai.addEventListener('blur',e=>{delete S.billDraft[inputKey];setBillAmt(bill.id,bm,e.target.value);});
     ar.appendChild(ai);card.appendChild(ar);
     if(isElectric){
-      const kr=D('row cp');kr.style.borderBottom='1px solid #e8e0d5';
+      const kr=D('row cp row-line');
       const left=D('');
       left.appendChild(h('div',{style:'font-size:11.5px;color:#8a7260'},'Meralco kWh used:'));
       if(kwh){
-        const meta=D('');
-        meta.style.cssText='margin-top:5px;background:#f8f4ef;border:1px solid #e8e0d5;border-radius:8px;padding:6px 8px';
+        const meta=D('soft-panel');
+        meta.style.marginTop='5px';
         meta.appendChild(h('div',{cls:'sf',style:'font-size:14px;color:#3a2818;line-height:1'},`${kwh.toFixed(2)} kWh`));
         meta.appendChild(h('div',{style:'font-size:9.5px;color:#8a7260;margin-top:3px;line-height:1.35'},`${cycleLabel(billCycle)} · ${dailyKwh.toFixed(2)} kWh/day`));
         left.appendChild(meta);
       }
       kr.appendChild(left);
       const kKey=bill.id+'_'+bm+'_kwh';
-      const ki=h('input',{type:'number',inputmode:'decimal',placeholder:'e.g. 157',style:'width:110px;padding:7px 9px;border-radius:7px;border:1.5px solid #e8e0d5;font-size:14px;font-weight:600;color:#3a2818;text-align:right;font-family:inherit'});
+      const ki=h('input',{type:'number',inputmode:'decimal',placeholder:'e.g. 157',cls:'amount-input'});
       ki.value=S.billDraft[kKey]!==undefined?S.billDraft[kKey]:(kwh||'');
       ki.addEventListener('input',e=>{S.billDraft[kKey]=e.target.value;});
       ki.addEventListener('blur',e=>{delete S.billDraft[kKey];setBillKwh(bill.id,bm,e.target.value);});
       kr.appendChild(ki);card.appendChild(kr);
       if(est){
-        const cmp=D('cp');cmp.style.cssText='padding-top:0;border-bottom:1px solid #e8e0d5';
+        const cmp=D('cp row-line');cmp.style.paddingTop='0';
         cmp.appendChild(metricTiles([
           {label:'Estimate',value:`${est.totalKwh.toFixed(2)} kWh`},
           {label:'Diff',value:`${diff>=0?'+':''}${diff.toFixed(2)} kWh`,color:Math.abs(diff)>kwh*.2?'#b8720c':'#2e6e4f'},
@@ -1995,7 +2079,7 @@ function renderReports(){
   const applianceMonths=(data.applianceUsage||[]).flatMap(u=>[mk(u.date),...(u.endDate?[mk(u.endDate)]:[])]);
   const allMonths=[...new Set([...(data.transactions||[]).map(t=>mk(t.date)),...(data.homeExpenses||[]).map(e=>mk(e.date)),...(data.airconUsage||[]).map(e=>mk(e.date)),...(data.tvUsage||[]).map(e=>mk(e.date)),...applianceMonths,...billMonths,...Array.from({length:3},(_,i)=>{const d2=new Date();d2.setMonth(d2.getMonth()-i);return mk(dateOf(d2));})])].sort((a,b)=>b.localeCompare(a));
   const msel=Sel(rm,allMonths,v=>set({rptMk:v}));
-  msel.style.cssText='padding:5px 9px;font-size:12px;border-radius:7px;border:1.5px solid #e8e0d5;background:#fff';
+  msel.classList.add('compact-select');
   [...msel.options].forEach(o=>{o.text=mklbl(o.value);});
   mw.appendChild(msel);toprow.appendChild(mw);sec.appendChild(toprow);
   // Totals
@@ -2035,7 +2119,7 @@ function renderReports(){
   const maxCat=sortedCats.length?sortedCats[0][1].amount:1;
   if(sortedCats.length){
     const bcard=D('card');bcard.style.marginBottom='9px';
-    bcard.appendChild(Object.assign(D(''),{style:'padding:8px 13px;background:#f8f4ef;border-bottom:1px solid #e8e0d5',innerHTML:'<span class="lbl">Breakdown by Category</span>'}));
+    bcard.appendChild(Object.assign(D('section-hdr'),{innerHTML:'<span class="lbl">Breakdown by Category</span>'}));
     const bcp=D('cp');
     const colors={'food':'#2e6e4f','home':'#1a56c4','bill':'#b8720c','aircon':'#e65100'};
     sortedCats.forEach(([cat,{amount,type}])=>{
@@ -2054,7 +2138,7 @@ function renderReports(){
   // Daily spending chart for the month
   const paidFoodTx=foodTx.filter(t=>!isHomeCookedTx(t));
   if(paidFoodTx.length){
-    const dc=D('card');dc.appendChild(Object.assign(D(''),{style:'padding:8px 13px;background:#f8f4ef;border-bottom:1px solid #e8e0d5',innerHTML:'<span class="lbl">Food Spending by Source</span>'}));
+    const dc=D('card');dc.appendChild(Object.assign(D('section-hdr'),{innerHTML:'<span class="lbl">Food Spending by Source</span>'}));
     const dcp=D('cp');
     const bySrc=paidFoodTx.reduce((acc,t)=>{if(!acc[t.source])acc[t.source]=0;acc[t.source]+=t.amount;return acc;},{});
     const maxSrc=Math.max(...Object.values(bySrc),1);
@@ -2071,10 +2155,11 @@ function renderReports(){
   if(actualKwh){
     const cmp=electricityComparisonForMonth(rm,data,actualKwh),eCycle=cmp.cycle,est=cmp.est;
     const diff=est.totalKwh-actualKwh,logsPct=actualKwh?est.totalKwh/actualKwh*100:0,amount=parseFloat(eBill?.monthlyAmounts?.[rm])||0,eff=amount?amount/actualKwh:0,untracked=Math.max(0,actualKwh-est.totalKwh);
-    const ec=D('card');ec.appendChild(Object.assign(D(''),{style:'padding:8px 13px;background:#f8f4ef;border-bottom:1px solid #e8e0d5',innerHTML:'<span class="lbl">Electricity Bill Comparison</span>'}));
+    const ec=D('card');ec.appendChild(Object.assign(D('section-hdr'),{innerHTML:'<span class="lbl">Electricity Bill Comparison</span>'}));
     const ep=D('cp');
     const actualBox=D('');
-    actualBox.style.cssText='background:#f4f0ea;border:1px solid #e8e0d5;border-radius:8px;padding:8px 10px;margin-bottom:8px';
+    actualBox.className='soft-panel-lg';
+    actualBox.style.padding='8px 10px';
     actualBox.appendChild(h('div',{cls:'lbl',style:'margin-bottom:2px'},'Meralco Actual'));
     actualBox.appendChild(h('div',{cls:'sf',style:'font-size:22px;color:#3a2818;line-height:1.05'},`${actualKwh.toFixed(2)} kWh`));
     actualBox.appendChild(h('div',{style:'font-size:10.5px;color:#8a7260;margin-top:4px'},`${cycleLabel(eCycle)} · ${(actualKwh/cycleDays(eCycle)).toFixed(2)} kWh/day`));
@@ -2102,11 +2187,11 @@ function renderReports(){
   const allEx=[...foodTx.filter(t=>t.amount>0).map(t=>({name:t.source+(t.note?' — '+t.note:''),amount:t.amount,date:t.date,type:'food'})),...homeEx.map(e=>({name:e.name,amount:e.amount,date:e.date,type:'home'})),...airconUsage.map(u=>({name:'Aircon ('+durationLabel(u.minutes||(u.hours||0)*60)+')',amount:u.cost,date:u.date,type:'aircon'})),...tvUsage.map(u=>({name:'TV ('+durationLabel(u.minutes||(u.hours||0)*60)+')',amount:u.cost,date:u.date,type:'tv'})),...applianceUsage.map(u=>({name:u.name+' ('+durationLabel(u.minutes)+')',amount:usageCostInRange(u,monthRange.start,monthRange.end),date:u.date,type:'appliance',badge:u.category||'Appliance'})),...appliances.filter(a=>a.alwaysOn).map(a=>({name:a.name+' (24/7)',amount:applianceAlwaysOnEstimate(a,reportRange.start,reportRange.end,data.meralcoRate).cost,date:`${rm}-01`,type:'appliance',badge:a.category||'Appliance'}))].sort((a,b)=>b.amount-a.amount).slice(0,10);
   if(allEx.length){
     const ec=D('card');ec.style.marginBottom='18px';
-    ec.appendChild(Object.assign(D(''),{style:'padding:8px 13px;background:#f8f4ef;border-bottom:1px solid #e8e0d5',innerHTML:'<span class="lbl">Top 10 Expenses This Month</span>'}));
+    ec.appendChild(Object.assign(D('section-hdr'),{innerHTML:'<span class="lbl">Top 10 Expenses This Month</span>'}));
     allEx.forEach(e=>{
       const row=D('row cr');row.style.borderBottom='1px solid #e8e0d5';
       const left=D('');
-      left.appendChild(h('div',{style:'font-size:12px;font-weight:600'},e.name));
+      left.appendChild(h('div',{cls:'row-main-sm'},e.name));
       const info=D('');info.style.cssText='font-size:10px;color:#8a7260;margin-top:1px;display:flex;gap:5px;align-items:center';
       const bcls=e.type==='food'?'bdg-f':e.type==='home'?'bdg-h':e.type==='tv'?'bdg-tv':e.type==='appliance'?'bdg-ap':'bdg-a';
       const blbl=e.type==='food'?'Food':e.type==='home'?'Home':e.type==='tv'?'TV':e.type==='appliance'?e.badge||'Appliance':'Aircon';
@@ -2118,7 +2203,7 @@ function renderReports(){
     });
     sec.appendChild(ec);
   }
-  if(!sortedCats.length&&!pantry.count){const e=D('card empty');e.innerHTML='<div style="font-size:34px;margin-bottom:7px">📊</div><div>No expenses logged for this month yet.</div>';sec.appendChild(e);}
+  if(!sortedCats.length&&!pantry.count){sec.appendChild(EmptyCard('reports','No expenses logged for this month yet.'));}
   return sec;
 }
 
@@ -2132,7 +2217,7 @@ function renderStocks(){
   toprow.appendChild(acts);sec.appendChild(toprow);
   // Status chips
   const chips=D('chips');
-  ['All','Low Stock','Out of Stock'].forEach(s=>{const c=D('chip'+(S.stockStatus===s?' chip-on':''));c.textContent=s==='All'?'All':s==='Low Stock'?'⚠️ Low':'❌ Out';c.onclick=()=>set({stockStatus:s});chips.appendChild(c);});
+  ['All','Low Stock','Out of Stock'].forEach(s=>{const c=D('chip'+(S.stockStatus===s?' chip-on':''));c.textContent=s==='All'?'All':s==='Low Stock'?'Low':'Out';c.onclick=()=>set({stockStatus:s});chips.appendChild(c);});
   ['All',...SCATS].forEach(cat=>{const c=D('chip'+(S.stockCat===cat?' chip-on':''));c.textContent=cat;c.onclick=()=>set({stockCat:cat});chips.appendChild(c);});
   sec.appendChild(chips);
   // Stats
@@ -2144,8 +2229,8 @@ function renderStocks(){
     const acp=D('cp');
     const close=h('button',{cls:'del',style:'float:right;margin:-4px -4px 4px 8px;color:#b83030',onClick:()=>set({stockAlertDismissed:alertSig})},'×');
     acp.appendChild(close);
-    if(outItems.length)acp.appendChild(h('div',{style:'font-size:12.5px;color:#b83030;font-weight:700;margin-bottom:4px'},`❌ Out of stock: ${outItems.map(s=>s.name).join(', ')}`));
-    if(lowItems.length)acp.appendChild(h('div',{style:'font-size:12.5px;color:#b8720c;font-weight:700'},`⚠️ Running low: ${lowItems.map(s=>s.name).join(', ')}`));
+    if(outItems.length)acp.appendChild(h('div',{style:'font-size:12.5px;color:#b83030;font-weight:700;margin-bottom:4px'},`Out of stock: ${outItems.map(s=>s.name).join(', ')}`));
+    if(lowItems.length)acp.appendChild(h('div',{style:'font-size:12.5px;color:#b8720c;font-weight:700'},`Running low: ${lowItems.map(s=>s.name).join(', ')}`));
     ac.appendChild(acp);sec.appendChild(ac);
   }
   let filtered=stocks;
@@ -2153,7 +2238,7 @@ function renderStocks(){
   if(S.stockStatus==='All')filtered=filtered.filter(s=>s.quantity>0);
   if(S.stockStatus==='Low Stock')filtered=filtered.filter(s=>s.quantity>0&&s.quantity<=s.minQty);
   if(S.stockStatus==='Out of Stock')filtered=filtered.filter(s=>s.quantity<=0);
-  if(!filtered.length){const e=D('card empty');e.innerHTML='<div style="font-size:34px;margin-bottom:7px">📦</div><div>No pantry items tracked yet.<br/>Add groceries and household supplies<br/>to keep track of your stocks.</div>';sec.appendChild(e);return sec;}
+  if(!filtered.length){sec.appendChild(EmptyCard('stocks','No pantry items tracked yet. Add groceries and household supplies to keep track of your stocks.'));return sec;}
   // Group by category
   const byCat=filtered.reduce((acc,s)=>{if(!acc[s.category])acc[s.category]=[];acc[s.category].push(s);return acc;},{});
   Object.entries(byCat).sort().forEach(([cat,items])=>{
@@ -2161,7 +2246,7 @@ function renderStocks(){
     items.forEach(item=>{
       const isOut=item.quantity<=0,isLow=item.quantity>0&&item.quantity<=item.minQty;
       const status=isOut?Sp('s-out','OUT'):isLow?Sp('s-low','LOW'):Sp('s-ok','OK');
-      const inner=D('row cr');inner.style.cssText='border-bottom:1px solid #e8e0d5;min-height:52px';
+      const inner=D('row cr row-line');inner.style.minHeight='52px';
       const left=D('');left.style.flex='1';
       const nrow=D('row');nrow.style.marginBottom='2px';
       const nm=h('span',{style:'font-size:12.5px;font-weight:700'},item.name);
@@ -2187,7 +2272,7 @@ function renderStocks(){
 function renderMeterAudit(){
   const data=S.data,f=S.auditF,a=meterAudit(data,f),card=D('card meter-audit-card');
   const hdr=D('row');
-  hdr.style.cssText='padding:8px 13px;background:#f8f4ef;border-bottom:1px solid #e8e0d5;cursor:pointer;gap:8px';
+  hdr.className='row section-hdr';hdr.style.cssText='cursor:pointer;gap:8px';
   const left=D('');left.style.cssText='flex:1;min-width:0';
   left.appendChild(h('span',{style:'font-weight:700;font-size:13px'},'Meter Audit'));
   if(a.valid){
@@ -2236,7 +2321,7 @@ function renderMeterAudit(){
     ['Sessions',a.sessionKwh,a.appliances.length],
     ['24/7',a.alwaysKwh,a.alwaysRows.length]
   ].forEach(([label,kwh,count])=>{
-    const box=D('');box.style.cssText='background:#f8f4ef;border:1px solid #e8e0d5;border-radius:8px;padding:7px';
+    const box=D('soft-panel');box.style.padding='7px';
     box.appendChild(h('div',{cls:'lbl'},label));
     box.appendChild(h('div',{cls:'sf',style:'font-size:15px;margin-top:1px'},`${kwh.toFixed(3)} kWh`));
     box.appendChild(h('div',{style:'font-size:9.5px;color:#8a7260'},`${count} item${count!==1?'s':''}`));
@@ -2289,7 +2374,7 @@ function renderCurrentlyOn(data=S.data){
   if(active.length){
     active.forEach(s=>{
       const est=activeEstimate(s,new Date(),data);
-      const inner=D('row cr');inner.style.cssText='border-bottom:1px solid #e8e0d5;gap:9px';
+      const inner=D('row cr row-line');inner.style.gap='9px';
       const left=D('');left.style.cssText='flex:1;min-width:0';
       left.appendChild(h('div',{style:'font-size:12.5px;font-weight:700'},s.name));
       left.appendChild(h('div',{style:'font-size:10.5px;color:#8a7260'},`${s.type==='aircon'?'Aircon · '+airconModeLabel(s.mode,s.sleepMode):s.type==='tv'?'TV':'Appliance'} · on since ${fmtTime12(timeOf(new Date(s.startedAt)))} · ${durationLabel(est.minutes)}${s.outdoorTemp!==''&&s.outdoorTemp!=null?' · out '+s.outdoorTemp+'C':''}`));
@@ -2359,13 +2444,13 @@ function renderAircon(){
 
   const toprow=D('row');toprow.style.marginBottom='10px';
   const cycleSel=Sel(S.viewMk,cycles.map(c=>c.key),v=>set({viewMk:v}));
-  cycleSel.style.cssText='padding:5px 9px;font-size:12px;border-radius:7px;border:1.5px solid #e8e0d5;background:#fff;max-width:160px';
+  cycleSel.classList.add('compact-select');cycleSel.style.maxWidth='160px';
   [...cycleSel.options].forEach(o=>{const c=cycles.find(x=>x.key===o.value);if(c)o.text=cycleLabel(c);});
-  const titleWrap=D('');titleWrap.appendChild(h('div',{style:'font-size:14px;font-weight:700'},'⚡ Electricity Usage'));titleWrap.appendChild(cycleSel);
+  const titleWrap=D('');titleWrap.appendChild(h('div',{style:'font-size:14px;font-weight:700'},'Electricity Usage'));titleWrap.appendChild(cycleSel);
   toprow.appendChild(titleWrap);
   const topActs=D('');topActs.style.cssText='display:flex;gap:6px';
   topActs.appendChild(Btn('bgsm','Appliances',()=>set({tab:'appliances'})));
-  topActs.appendChild(Btn('bgsm','⚙️ Config',()=>set({modal:'airSet',airSetF:{rate:data.meralcoRate,readDay:readDay,startup:rates.startup,sleepDay:rates.sleepDay,sleepNight:rates.sleepNight,ecoDay:rates.ecoDay,ecoNight:rates.ecoNight,day:rates.day,night:rates.night,defaultMode:airconModeFrom(data.airconDefaultMode,data.airconDefaultSleepMode),defaultSleep:data.airconDefaultSleepMode!==false,defaultTemp:data.airconDefaultTemp||'29',tempBaseline:data.airconTempBaseline||29,tempStep:data.airconTempStepPct||7,outdoorBaseline:data.airconOutdoorBaseline||30,outdoorStep:data.airconOutdoorStepPct||2.5,tvWatts:data.tvWatts||175}})));
+  topActs.appendChild(BtnI('bgsm','settings','Config',()=>set({modal:'airSet',airSetF:{rate:data.meralcoRate,readDay:readDay,startup:rates.startup,sleepDay:rates.sleepDay,sleepNight:rates.sleepNight,ecoDay:rates.ecoDay,ecoNight:rates.ecoNight,day:rates.day,night:rates.night,defaultMode:airconModeFrom(data.airconDefaultMode,data.airconDefaultSleepMode),defaultSleep:data.airconDefaultSleepMode!==false,defaultTemp:data.airconDefaultTemp||'29',tempBaseline:data.airconTempBaseline||29,tempStep:data.airconTempStepPct||7,outdoorBaseline:data.airconOutdoorBaseline||30,outdoorStep:data.airconOutdoorStepPct||2.5,tvWatts:data.tvWatts||175}})));
   toprow.appendChild(topActs);
   sec.appendChild(toprow);
 
@@ -2389,7 +2474,7 @@ function renderAircon(){
     alwaysOn.sort((a,b)=>applianceAlwaysOnEstimate(b,selectedRange.start,selectedRange.end,data.meralcoRate).cost-applianceAlwaysOnEstimate(a,selectedRange.start,selectedRange.end,data.meralcoRate).cost).forEach(a=>{
       const est=applianceAlwaysOnEstimate(a,selectedRange.start,selectedRange.end,data.meralcoRate);
       const cycleCost=est.cost,cycleKwh=est.kwh;
-      const inner=D('row cr');inner.style.cssText='border-bottom:1px solid #e8e0d5;gap:9px';
+      const inner=D('row cr row-line');inner.style.gap='9px';
       const left=D('');left.style.cssText='flex:1;min-width:0';
       left.appendChild(h('div',{style:'font-size:12.5px;font-weight:700'},a.name));
       left.appendChild(h('div',{style:'font-size:10.5px;color:#8a7260'},`${a.category} · ${applianceLabel(a)} · ${cycleKwh.toFixed(3)} kWh/cycle`));
@@ -2460,7 +2545,7 @@ function renderAircon(){
   card.appendChild(hdr);
   if(S.airconHistoryOpen){
   mUsage.forEach(u=>{
-    const inner=D('row cr');inner.style.borderBottom='1px solid #e8e0d5';
+      const inner=D('row cr row-line');
     const left=D('');
     left.appendChild(h('div',{style:'font-size:13px;font-weight:600'},`Aircon · ${durationLabel(u.minutes||(u.hours||0)*60)} · ${airconModeLabel(u.mode,u.sleepMode)}${u.tempC!==''&&u.tempC!=null?' · set '+u.tempC+'C':''}${u.roomTemp!==''&&u.roomTemp!=null?' · room '+u.roomTemp+'C':''}`));
     const meta=D('');meta.style.cssText='font-size:10.5px;color:#8a7260;margin-top:2px;display:flex;align-items:center;gap:5px;flex-wrap:wrap';
@@ -2487,7 +2572,7 @@ function renderAircon(){
   tvCard.appendChild(tvHdr);
   if(S.tvHistoryOpen){
   mTv.forEach(u=>{
-    const inner=D('row cr');inner.style.borderBottom='1px solid #e8e0d5';
+      const inner=D('row cr row-line');
     const left=D('');
     left.appendChild(h('div',{style:'font-size:13px;font-weight:600'},`TV · ${durationLabel(u.minutes||(u.hours||0)*60)}`));
     const meta=D('');meta.style.cssText='font-size:10.5px;color:#8a7260;margin-top:2px;display:flex;align-items:center;gap:5px;flex-wrap:wrap';
@@ -2515,7 +2600,7 @@ function renderAircon(){
   apHist.appendChild(apHdr);
   if(S.applianceHistoryOpen){
   mApplianceUsage.forEach(u=>{
-    const inner=D('row cr');inner.style.borderBottom='1px solid #e8e0d5';
+      const inner=D('row cr row-line');
     const left=D('');
     left.appendChild(h('div',{style:'font-size:13px;font-weight:600'},`${u.name} · ${durationLabel(u.minutes)}`));
     const meta=D('');meta.style.cssText='font-size:10.5px;color:#8a7260;margin-top:2px;display:flex;align-items:center;gap:5px;flex-wrap:wrap';
@@ -2588,7 +2673,7 @@ function renderAppliances(){
   if(always.length){
     always.sort((a,b)=>applianceMonthly(b,data.meralcoRate).cost-applianceMonthly(a,data.meralcoRate).cost).forEach(a=>{
       const est=applianceMonthly(a,data.meralcoRate);
-      const inner=D('row cr');inner.style.cssText='border-bottom:1px solid #e8e0d5;gap:9px';
+      const inner=D('row cr row-line');inner.style.gap='9px';
       const left=D('');left.style.cssText='flex:1;min-width:0';
       left.appendChild(h('div',{style:'font-size:12.5px;font-weight:700'},a.name));
       left.appendChild(h('div',{style:'font-size:10.5px;color:#8a7260'},`${a.category} · ${applianceLabel(a)} · ${est.kwh.toFixed(3)} kWh/month`));
@@ -2607,7 +2692,7 @@ function renderAppliances(){
   if(session.length){
     session.sort((a,b)=>a.category.localeCompare(b.category)||a.name.localeCompare(b.name)).forEach(a=>{
       const est=applianceSessionEstimate(a,a.sessionMinutes,data.meralcoRate);
-      const inner=D('row cr');inner.style.cssText='border-bottom:1px solid #e8e0d5;gap:9px';
+      const inner=D('row cr row-line');inner.style.gap='9px';
       const left=D('');left.style.cssText='flex:1;min-width:0';
       left.appendChild(h('div',{style:'font-size:12.5px;font-weight:700'},a.name));
       left.appendChild(h('div',{style:'font-size:10.5px;color:#8a7260'},`${a.category} · ${applianceLabel(a)} · ${est.kwh.toFixed(3)} kWh/session`));
@@ -2696,7 +2781,7 @@ function renderModal(){
     const cal=D('');cal.style.cssText='display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:4px;margin-bottom:10px';
     ['S','M','T','W','T','F','S'].forEach(d=>cal.appendChild(h('div',{style:'font-size:9px;color:#8a7260;font-weight:800;text-align:center;padding-bottom:2px'},d)));
     const padStart=chart[0]?.date.getDay()||0,padEnd=(7-((padStart+chart.length)%7))%7;
-    for(let i=0;i<padStart;i++){const blank=D('');blank.style.cssText='min-height:64px;border-radius:7px;background:#f8f4ef;border:1px solid transparent';cal.appendChild(blank);}
+    for(let i=0;i<padStart;i++){const blank=D('calendar-blank');blank.style.minHeight='64px';cal.appendChild(blank);}
     chart.forEach(cd=>{
       const isT=cd.ds===toStr(),isSel=cd.ds===S.selectedMealDate,intensity=Math.min(1,cd.spend/maxSpend),cell=D('');
       cell.style.cssText=`min-height:64px;border:1.5px solid ${isSel?'#1b4d35':isT?'#b8720c':cd.over?'#f5c2c2':'#e8e0d5'};background:${cd.count?cd.over?`rgba(184,48,48,${0.05+intensity*.12})`:`rgba(27,77,53,${0.04+Math.max(intensity,.25)*.1})`:'#fff'};border-radius:7px;padding:5px 4px;display:flex;flex-direction:column;gap:3px;overflow:hidden;cursor:pointer`;
@@ -2710,12 +2795,12 @@ function renderModal(){
       const fill=D('');fill.style.cssText=`height:100%;width:${Math.min(100,cd.spend/maxSpend*100).toFixed(1)}%;background:${cd.over?'#d45c5c':'#2e6e4f'}`;track.appendChild(fill);cell.appendChild(track);
       cal.appendChild(cell);
     });
-    for(let i=0;i<padEnd;i++){const blank=D('');blank.style.cssText='min-height:64px;border-radius:7px;background:#f8f4ef;border:1px solid transparent';cal.appendChild(blank);}
+    for(let i=0;i<padEnd;i++){const blank=D('calendar-blank');blank.style.minHeight='64px';cal.appendChild(blank);}
     c.appendChild(cal);
     const dayCard=D('card');dayCard.style.marginBottom='10px';dayCard.appendChild(DivHdr(`Meals on ${new Date((selectedDay?.ds||toStr())+'T12:00:00').toLocaleDateString('en-PH',{month:'short',day:'numeric'})}`));
     if(selectedItems.length){
       selectedItems.forEach(item=>{
-        const row=D('row cr');row.style.cssText='border-bottom:1px solid #e8e0d5;gap:8px';
+        const row=D('row cr row-line');row.style.gap='8px';
         const left=D('');left.style.cssText='min-width:0;flex:1';
         left.appendChild(h('div',{style:'font-size:12px;font-weight:700;color:#3a2818;white-space:nowrap;overflow:hidden;text-overflow:ellipsis'},item.note||item.source));
         left.appendChild(h('div',{style:'font-size:10px;color:#8a7260;margin-top:1px'},item.source));
@@ -2748,7 +2833,7 @@ function renderModal(){
     const cal=D('');cal.style.cssText='display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:4px;margin-bottom:10px';
     ['S','M','T','W','T','F','S'].forEach(d=>cal.appendChild(h('div',{style:'font-size:9px;color:#8a7260;font-weight:800;text-align:center;padding-bottom:2px'},d)));
     const padStart=cycle.start.getDay(),padEnd=(7-((padStart+chart.length)%7))%7;
-    for(let i=0;i<padStart;i++){const blank=D('');blank.style.cssText='min-height:68px;border-radius:7px;background:#f8f4ef;border:1px solid transparent';cal.appendChild(blank);}
+    for(let i=0;i<padStart;i++){const blank=D('calendar-blank');blank.style.minHeight='68px';cal.appendChild(blank);}
     chart.forEach(cd=>{
       const isT=cd.ds===toStr(),dt=dtOf(cd.ds),intensity=Math.min(1,cd.cost/maxCost),cell=D('');
       cell.style.cssText=`min-height:68px;border:1px solid ${isT?'#b8720c':'#e8e0d5'};background:${cd.cost>0?`rgba(27,77,53,${0.04+intensity*.08})`:'#fff'};border-radius:7px;padding:5px 4px;display:flex;flex-direction:column;gap:3px;overflow:hidden`;
@@ -2767,7 +2852,7 @@ function renderModal(){
       }
       cell.appendChild(strip);cal.appendChild(cell);
     });
-    for(let i=0;i<padEnd;i++){const blank=D('');blank.style.cssText='min-height:68px;border-radius:7px;background:#f8f4ef;border:1px solid transparent';cal.appendChild(blank);}
+    for(let i=0;i<padEnd;i++){const blank=D('calendar-blank');blank.style.minHeight='68px';cal.appendChild(blank);}
     c.appendChild(cal);
     const legend=D('');legend.style.cssText='font-size:10px;color:#8a7260;display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:12px';
     legend.appendChild(h('span',{},'■ Aircon'));legend.lastChild.style.color='#b8720c';
@@ -2786,7 +2871,7 @@ function renderModal(){
     const next=Btn('bgsm','>',()=>set({chartMonthKey:shiftMonthKey(monthKey,1)}));next.style.width='36px';
     nav.appendChild(prev);nav.appendChild(h('div',{cls:'sf',style:'font-size:16px;flex:1;text-align:center;color:#3a2818'},mklbl(monthKey)));nav.appendChild(next);c.appendChild(nav);
     c.appendChild(h('div',{style:'font-size:10.5px;color:#8a7260;text-align:center;margin:-4px 0 9px'},`Meralco cycle ${cycleLabel(r.cycle)}`));
-    const hero=D('');hero.style.cssText='background:#f4f0ea;border:1px solid #e8e0d5;border-radius:8px;padding:9px 10px;margin-bottom:8px';
+    const hero=D('soft-panel-lg');
     hero.appendChild(h('div',{cls:'lbl'},'Usage Overview'));
     hero.appendChild(h('div',{cls:'sf',style:'font-size:24px;color:#3a2818;margin-top:2px'},`${r.totalKwh.toFixed(2)} kWh`));
     hero.appendChild(h('div',{style:'font-size:10.5px;color:#8a7260;margin-top:3px'},`${fmt2(r.totalCost)} estimated · ${(r.totalKwh/r.days).toFixed(2)} kWh/day · ${r.logs.length} logged session${r.logs.length!==1?'s':''}`));
@@ -2816,7 +2901,7 @@ function renderModal(){
     const top=D('card');top.appendChild(DivHdr('Most Consumption'));
     if(r.top.length){
       r.top.slice(0,6).forEach(item=>{
-        const row=D('row cr');row.style.cssText='border-bottom:1px solid #e8e0d5;gap:8px';
+        const row=D('row cr row-line');row.style.gap='8px';
         const left=D('');left.style.cssText='flex:1;min-width:0';
         left.appendChild(h('div',{style:'font-size:12.5px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis'},item.name));
         left.appendChild(h('div',{style:'font-size:10px;color:#8a7260'},`${item.type} · ${item.logs?item.logs+' log'+(item.logs!==1?'s':''):'24/7'}${item.hours?` · ${durationLabel(item.hours*60)}`:''}`));
@@ -2830,7 +2915,7 @@ function renderModal(){
     const recent=D('card');recent.appendChild(DivHdr('Recent Usage Logs'));
     if(r.logs.length){
       r.logs.slice(0,8).forEach(log=>{
-        const row=D('row cr');row.style.cssText='border-bottom:1px solid #e8e0d5;gap:8px';
+        const row=D('row cr row-line');row.style.gap='8px';
         const left=D('');left.style.cssText='flex:1;min-width:0';
         left.appendChild(h('div',{style:'font-size:12px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis'},`${log.type} · ${log.name}`));
         left.appendChild(h('div',{style:'font-size:10px;color:#8a7260'},`${new Date(log.date+'T12:00:00').toLocaleDateString('en-PH',{month:'short',day:'numeric'})}${log.time?' · '+log.time:''}`));
@@ -2852,7 +2937,7 @@ function renderModal(){
     const prev=Btn('bgsm','<',()=>set({chartMonthKey:shiftMonthKey(monthKey,-1)}));prev.style.width='36px';
     const next=Btn('bgsm','>',()=>set({chartMonthKey:shiftMonthKey(monthKey,1)}));next.style.width='36px';
     nav.appendChild(prev);nav.appendChild(h('div',{cls:'sf',style:'font-size:16px;flex:1;text-align:center;color:#3a2818'},mklbl(monthKey)));nav.appendChild(next);c.appendChild(nav);
-    const hero=D('');hero.style.cssText='background:#f4f0ea;border:1px solid #e8e0d5;border-radius:8px;padding:9px 10px;margin-bottom:8px';
+    const hero=D('soft-panel-lg');
     hero.appendChild(h('div',{cls:'lbl'},'Food Overview'));
     hero.appendChild(h('div',{cls:'sf',style:'font-size:24px;color:#3a2818;margin-top:2px'},fmt(total)));
     hero.appendChild(h('div',{style:'font-size:10.5px;color:#8a7260;margin-top:3px'},`${paid.length} paid log${paid.length!==1?'s':''} · ${mealLogs.length} meal log${mealLogs.length!==1?'s':''} · ${fmt(Math.round(total/Math.max(1,[...new Set(paid.map(t=>t.date))].length)))}/active day`));
@@ -2875,7 +2960,7 @@ function renderModal(){
     const mealCard=D('card');mealCard.appendChild(DivHdr('Meal Logs'));
     if(mealLogs.length){
       mealLogs.sort((a,b)=>b.date.localeCompare(a.date)).slice(0,10).forEach(t=>{
-        const row=D('row cr');row.style.cssText='border-bottom:1px solid #e8e0d5;gap:8px';
+        const row=D('row cr row-line');row.style.gap='8px';
         const left=D('');left.style.cssText='flex:1;min-width:0';
         left.appendChild(h('div',{style:'font-size:12.5px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis'},`Home-cooked${t.note?' · '+t.note:''}`));
         left.appendChild(h('div',{style:'font-size:10px;color:#8a7260'},new Date(t.date+'T12:00:00').toLocaleDateString('en-PH',{weekday:'short',month:'short',day:'numeric'})));
@@ -2894,7 +2979,7 @@ function renderModal(){
     const prev=Btn('bgsm','<',()=>set({chartMonthKey:shiftMonthKey(monthKey,-1)}));prev.style.width='36px';
     const next=Btn('bgsm','>',()=>set({chartMonthKey:shiftMonthKey(monthKey,1)}));next.style.width='36px';
     nav.appendChild(prev);nav.appendChild(h('div',{cls:'sf',style:'font-size:16px;flex:1;text-align:center;color:#3a2818'},mklbl(monthKey)));nav.appendChild(next);c.appendChild(nav);
-    const hero=D('');hero.style.cssText='background:#f4f0ea;border:1px solid #e8e0d5;border-radius:8px;padding:9px 10px;margin-bottom:8px';
+    const hero=D('soft-panel-lg');
     hero.appendChild(h('div',{cls:'lbl'},'Home Overview'));
     hero.appendChild(h('div',{cls:'sf',style:'font-size:24px;color:#3a2818;margin-top:2px'},fmt(total)));
     hero.appendChild(h('div',{style:'font-size:10.5px;color:#8a7260;margin-top:3px'},`${count} item${count!==1?'s':''} · Avg ${fmt(Math.round(total/Math.max(1,count)))}/item`));
@@ -3067,9 +3152,10 @@ function renderModal(){
   if(S.modal==='settings'){
     const c=D(''),f=S.settingsF;
     const syncCard=D('');
-    syncCard.style.cssText='background:#f8f4ef;border:1px solid #e8e0d5;border-radius:8px;padding:10px 11px;margin-bottom:12px';
-    syncCard.appendChild(h('div',{style:'font-size:12px;font-weight:800;color:#3a2818;margin-bottom:3px'},'Cloud Sync'));
-    syncCard.appendChild(h('div',{style:'font-size:11px;color:#8a7260;line-height:1.45;margin-bottom:7px'},syncLabel()));
+    syncCard.className='soft-panel';
+    syncCard.style.cssText='padding:10px 11px;margin-bottom:12px';
+    syncCard.appendChild(h('div',{cls:'settings-theme-title'},'Cloud Sync'));
+    syncCard.appendChild(h('div',{cls:'settings-theme-sub',style:'margin-bottom:7px'},syncLabel()));
     const syncTimes=D('');
     syncTimes.style.cssText='display:grid;grid-template-columns:1fr;gap:2px;font-size:10.5px;color:#8a7260;line-height:1.4;margin-bottom:9px';
     syncTimes.appendChild(h('div',{},'Last updated: '+syncTimeLabel(S.data.modifiedAt)));
@@ -3087,6 +3173,19 @@ function renderModal(){
     }
     syncCard.appendChild(syncBtns);
     c.appendChild(syncCard);
+    const themeCard=D('settings-theme-card');
+    const themeCopy=D('');
+    themeCopy.appendChild(h('div',{cls:'settings-theme-title'},'Dark Mode'));
+    themeCopy.appendChild(h('div',{cls:'settings-theme-sub'},f.darkMode?'Dark':'Light'));
+    const themeRight=D('settings-theme-right');
+    themeRight.appendChild(h('span',{cls:'settings-theme-mode'},f.darkMode?'Dark':'Light'));
+    const themeToggle=h('button',{cls:'theme-switch'+(f.darkMode?' theme-switch-on':''),type:'button','aria-pressed':f.darkMode?'true':'false','aria-label':'Toggle dark mode'});
+    themeToggle.appendChild(D('theme-switch-knob'));
+    themeToggle.onclick=()=>{f.darkMode=!f.darkMode;render();};
+    themeCard.appendChild(themeCopy);
+    themeRight.appendChild(themeToggle);
+    themeCard.appendChild(themeRight);
+    c.appendChild(themeCard);
     const gk=Inp('',{type:'password',placeholder:'AIza...',value:f.geminiKey||''});gk.oninput=e=>f.geminiKey=e.target.value;c.appendChild(Fg('Gemini API Key',gk,'Stored only in this browser.'));
     c.appendChild(Fg('Weather Provider',Sel(f.weatherProvider||'open-meteo',['open-meteo'],v=>f.weatherProvider=v),'Open-Meteo does not need an API key.'));
     const wl=Inp('',{type:'text',value:f.weatherLabel||''});wl.oninput=e=>f.weatherLabel=e.target.value;c.appendChild(Fg('Location Label',wl));
@@ -3274,8 +3373,8 @@ function renderModal(){
 }
 
 // ─── MAIN RENDER ─────────────────────────────────────────────
-const TABS=[{id:'dash',icon:'🏠',label:'Home'},{id:'food',icon:'🍽️',label:'Food'},{id:'home',icon:'🧴',label:'Home'},{id:'bills',icon:'📋',label:'Bills'},{id:'aircon',icon:'⚡',label:'Electric'},{id:'scan',icon:'📸',label:'Scan'}];
-const SCREEN_LABELS={dash:'Overview',food:'Food Expenses',home:'Home & Toiletries',bills:'Bills',prices:'Price Comparison',scan:'AI Scanner',reports:'📊 Reports',stocks:'📦 Pantry & Stocks',aircon:'Electricity Usage',appliances:'Appliance Manager',lists:'Lists & Defaults'};
+const TABS=[{id:'dash',icon:'overview',label:'Home'},{id:'food',icon:'food',label:'Food'},{id:'home',icon:'home',label:'Home'},{id:'bills',icon:'bills',label:'Bills'},{id:'aircon',icon:'electric',label:'Electric'},{id:'scan',icon:'scan',label:'Scan'}];
+const SCREEN_LABELS={dash:'Overview',food:'Food Expenses',home:'Home & Toiletries',bills:'Bills',prices:'Price Comparison',scan:'AI Scanner',reports:'Reports',stocks:'Pantry & Stocks',aircon:'Electricity Usage',appliances:'Appliance Manager',lists:'Lists & Defaults'};
 
 function render(){
   ensureLiveTick();
@@ -3283,15 +3382,19 @@ function render(){
   rememberContentScroll();
   const root=document.getElementById('app');root.innerHTML='';
   document.body.classList.add('app-ready');
-  root.style.background='#f4f0ea';
-  const app=D('');app.style.cssText='margin:0 auto;height:100vh;height:100svh;background:#f4f0ea;display:flex;flex-direction:column;overflow:hidden;min-height:0';app.className='bt-app';
+  const darkMode=S.modal==='settings'?!!S.settingsF.darkMode:!!S.data.darkMode;
+  document.body.classList.toggle('theme-dark',darkMode);
+  root.classList.toggle('theme-dark',darkMode);
+  root.style.background=darkMode?'#15181e':'#f4f0ea';
+  const app=D('');app.style.cssText=`margin:0 auto;height:100vh;height:100svh;background:${darkMode?'#15181e':'#f4f0ea'};display:flex;flex-direction:column;overflow:hidden;min-height:0`;app.className='bt-app';
+  app.classList.toggle('theme-dark',darkMode);
   // Close swipe on tap outside
   app.addEventListener('touchstart',e=>{if(openSw&&!openSw.contains(e.target)){const c=openSw.querySelector('.swc');if(c){c.style.transition='transform .15s ease';c.style.transform='';}openSw=null;}},{passive:true});
   // Drawer
   app.appendChild(renderDrawer());
   // Header
   const hdr=h('div',{cls:'hdr'});const hrow=h('div',{cls:'hrow'});
-  hrow.appendChild(h('button',{cls:'h-menu',onClick:()=>set({drawerOpen:true})},'☰'));
+  hrow.appendChild(h('button',{cls:'h-menu',onClick:()=>set({drawerOpen:true}),'aria-label':'Open menu'},iconEl('menu','h-menu-icon app-icon')));
   const hmid=D('h-mid');hmid.appendChild(Object.assign(D('htitle'),{textContent:SCREEN_LABELS[S.tab]||'kipr'}));hmid.appendChild(Object.assign(D('hsub'),{textContent:'Budget · Prices · Savings'}));
   const hbal=D('h-bal');hbal.appendChild(Object.assign(D('hbl'),{textContent:'Balance'}));
   const hbalLine=D('bal-line bal-line-head');
@@ -3325,7 +3428,7 @@ function render(){
   TABS.forEach(t=>{
     const on=S.tab===t.id;
     const b=D('tb'+(on?' tb-on':''));
-    b.appendChild(Object.assign(D('tb-ic'),{textContent:t.icon}));
+    b.appendChild(iconEl(t.icon,'tb-ic app-icon'));
     b.appendChild(Object.assign(D('tb-lb'+(on?' tb-lb-on':'')),{textContent:t.label}));
     b.onclick=()=>set({tab:t.id});tb.appendChild(b);
   });
