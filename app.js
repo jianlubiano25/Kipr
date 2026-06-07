@@ -3443,7 +3443,7 @@ function render(){
   const splash=document.getElementById('splash');
   if(splash&&!splash.classList.contains('splash-hide')){
     splash.classList.add('splash-hide');
-    setTimeout(()=>splash.remove(),220);
+    setTimeout(()=>splash.remove(),360);
   }
   ensureWeather();
 }
