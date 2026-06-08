@@ -19,8 +19,9 @@
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Lora:wght@500;600&family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&display=swap"/>
 
 <link rel="apple-touch-icon" href="Kipr-icon.png"/>
+<link rel="preload" as="image" href="Kipr-logo-org.png"/>
 
-<link rel="stylesheet" href="styles.css?v=20260608-splash-fade"/>
+<link rel="stylesheet" href="styles.css?v=20260608-splash-pop"/>
 
 <style>
   /*
@@ -52,15 +53,16 @@
     width: min(48vw, 190px);
     height: auto;
     display: block;
-    opacity: 0;
-    animation: splashLogoIn .42s ease .12s forwards;
+    opacity: 1;
+    animation: splashLogoPop .38s cubic-bezier(.2,.9,.25,1.25) both;
   }
   #splash.splash-hide img {
     animation: splashLogoOut .28s ease forwards;
   }
-  @keyframes splashLogoIn {
-    from { opacity: 0; transform: translateY(4px) scale(.98); }
-    to { opacity: 1; transform: translateY(0) scale(1); }
+  @keyframes splashLogoPop {
+    0% { transform: scale(.9); }
+    62% { transform: scale(1.045); }
+    100% { transform: scale(1); }
   }
   @keyframes splashLogoOut {
     from { opacity: 1; transform: translateY(0) scale(1); }
@@ -68,6 +70,7 @@
   }
 </style>
 <script>
+  window.__kiprSplashStartedAt = Date.now();
   const standaloneQuery = window.matchMedia('(display-mode: standalone)');
   const setStandaloneMode = () => {
     document.documentElement.classList.toggle('app-standalone', !!window.navigator.standalone || standaloneQuery.matches);
@@ -80,6 +83,6 @@
 <div id="splash" aria-hidden="true"><img src="Kipr-logo-org.png" alt=""/></div>
 <div id="app"></div>
 <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
-<script src="app.js?v=20260608-splash-fade"></script>
+<script src="app.js?v=20260608-splash-pop"></script>
 </body>
 </html>

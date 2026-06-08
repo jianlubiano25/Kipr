@@ -3441,9 +3441,14 @@ function render(){
     requestAnimationFrame(()=>{content.scrollTop=top;});
   }
   const splash=document.getElementById('splash');
-  if(splash&&!splash.classList.contains('splash-hide')){
-    splash.classList.add('splash-hide');
-    setTimeout(()=>splash.remove(),360);
+  if(splash&&!splash.classList.contains('splash-hide')&&!splash.dataset.hiding){
+    splash.dataset.hiding='1';
+    const elapsed=Date.now()-(window.__kiprSplashStartedAt||Date.now());
+    const wait=Math.max(720-elapsed,0);
+    setTimeout(()=>{
+      splash.classList.add('splash-hide');
+      setTimeout(()=>splash.remove(),360);
+    },wait);
   }
   ensureWeather();
 }
