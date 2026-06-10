@@ -200,6 +200,23 @@ html.app-standalone .tabbar{
 .g2 .inp,.g2 .sel{padding:9px 7px;font-size:13px;width:100%}
 .row{display:flex;justify-content:space-between;align-items:center;min-width:0}
 
+.electric-metrics-grid{
+  display:grid;
+  grid-template-columns:repeat(2,minmax(0,1fr));
+  gap:8px;
+  min-width:0;
+}
+.electric-metrics-grid > .card{
+  margin-bottom:0;
+  min-width:0;
+}
+.electric-kwh-card{
+  grid-column:1 / -1;
+}
+.electric-summary-section{
+  margin-bottom:10px;
+}
+
 /* ─── DATE / TIME INPUTS — prevent iOS Safari overflow ───────── */
 input[type="date"],input[type="time"]{
   -webkit-appearance:none;min-width:0 !important;
@@ -399,6 +416,17 @@ body.theme-dark.app-ready{background:#111318}
 .bdg-w3{background:#fff3e0;color:#b8720c}
 .bdg-w4{background:#f6e8ef;color:#9f315c}
 .bdg-w5{background:#f0e8de;color:#6b4c36}
+.cat-badge{display:inline-flex;align-items:center;height:18px;padding:0 7px;border-radius:7px;font-size:9px;font-weight:800;letter-spacing:.2px;line-height:1;white-space:nowrap;flex-shrink:0;background:#f0e8de;color:#6b4c36}
+.cat-cooling{background:#e6f3ec;color:#1b4d35}
+.cat-kitchen{background:#fff3e0;color:#9a5600}
+.cat-network{background:#e8f0fe;color:#1a56c4}
+.cat-security{background:#fdecea;color:#b83030}
+.cat-computer{background:#f1e8ff;color:#6b31b5}
+.cat-chargers{background:#e5f7fb;color:#08728a}
+.cat-lighting{background:#fff8d9;color:#8a6500}
+.cat-laundry{background:#edf0ff;color:#4752a6}
+.cat-aircon{background:#fff0e5;color:#c44b00}
+.cat-tv{background:#e6f3ec;color:#2e6e4f}
 
 /* ─── REPORT BARS ────────────────────────────────────────────── */
 .rpt-bar-row{display:flex;align-items:center;gap:9px;padding:5px 0}
@@ -424,7 +452,7 @@ body.theme-dark.app-ready{background:#111318}
 .weather-refresh{width:100%;padding-left:6px;padding-right:6px}
 .wv{height:60px;border-radius:13px;border:1px solid rgba(232,224,213,.9);position:relative;overflow:hidden;background:linear-gradient(155deg,#93cdf8 0%,#edf8ff 52%,#ffe0a8 100%);box-shadow:inset 0 1px 0 rgba(255,255,255,.75),0 8px 20px rgba(58,40,24,.08)}
 .wv:before{content:"";position:absolute;inset:0;background:linear-gradient(180deg,rgba(255,255,255,.45),rgba(255,255,255,0) 44%,rgba(58,40,24,.08));pointer-events:none;z-index:12}
-.wv:after{content:"";position:absolute;inset:0;opacity:0;background:linear-gradient(180deg,rgba(255,255,255,.18),rgba(255,255,255,0) 36%),radial-gradient(circle at 24% 18%,rgba(255,255,255,.26),transparent 24%);animation:weatherSkyFlash 3.2s steps(1,end) infinite;z-index:11}
+.wv:after{content:"";position:absolute;inset:0;opacity:0;background:linear-gradient(180deg,rgba(255,255,255,.18),rgba(255,255,255,0) 36%),radial-gradient(circle at 24% 18%,rgba(255,255,255,.26),transparent 24%);z-index:11}
 .wv-glow{position:absolute;width:58px;height:58px;left:-16px;top:-16px;border-radius:50%;background:radial-gradient(circle,rgba(255,220,134,.72),rgba(255,220,134,0) 66%);animation:weatherPulse 3.4s ease-in-out infinite}
 .wv-sun{position:absolute;width:24px;height:24px;border-radius:50%;background:linear-gradient(135deg,#ffe083,#f5a623);left:13px;top:11px;box-shadow:0 0 0 6px rgba(255,199,78,.18),0 0 18px rgba(245,166,35,.45);animation:weatherFloat 3.8s ease-in-out infinite}
 .wv-sun span{position:absolute;inset:-8px;border-radius:50%;background:repeating-conic-gradient(from 0deg,rgba(255,199,78,.34) 0 10deg,rgba(255,199,78,0) 10deg 24deg);animation:weatherSpin 10s linear infinite}
@@ -450,9 +478,9 @@ body.theme-dark.app-ready{background:#111318}
 .wv-cloud:after{width:22px;height:22px;right:5px;top:-11px;background:linear-gradient(180deg,#fff,#f2f7fb)}
 .wv-cloud-a{right:7px;top:23px;animation:weatherDrift 4.8s ease-in-out infinite}
 .wv-cloud-b{right:29px;top:32px;transform:scale(.7);animation:weatherDriftSmall 5.6s ease-in-out infinite}
-.wv-rain{position:absolute;width:2px;height:16px;border-radius:2px;background:linear-gradient(180deg,rgba(97,174,236,0),#3b8ed0);top:36px;opacity:0;z-index:3;animation:weatherRain .82s linear infinite}
+.wv-rain{position:absolute;width:2px;height:16px;border-radius:2px;background:linear-gradient(180deg,rgba(97,174,236,0),#3b8ed0);top:36px;opacity:0;z-index:3}
 .wv-rain-a{left:25px}.wv-rain-b{left:36px;animation-delay:.13s}.wv-rain-c{left:47px;animation-delay:.26s}.wv-rain-d{left:58px;animation-delay:.39s}.wv-rain-e{left:69px;animation-delay:.52s}.wv-rain-f{left:78px;animation-delay:.65s}
-.wv-bolt{position:absolute;left:49px;top:31px;width:13px;height:20px;background:#ffd75e;clip-path:polygon(42% 0,100% 0,63% 42%,100% 42%,20% 100%,42% 54%,0 54%);filter:drop-shadow(0 0 5px rgba(255,215,94,.75));opacity:0;z-index:5;animation:weatherFlash 2.4s steps(1,end) infinite}
+.wv-bolt{position:absolute;left:49px;top:31px;width:13px;height:20px;background:#ffd75e;clip-path:polygon(42% 0,100% 0,63% 42%,100% 42%,20% 100%,42% 54%,0 54%);filter:drop-shadow(0 0 5px rgba(255,215,94,.75));opacity:0;z-index:5}
 .wv-fog{position:absolute;left:12px;right:12px;height:3px;border-radius:3px;background:linear-gradient(90deg,rgba(138,114,96,0),rgba(138,114,96,.46),rgba(138,114,96,0));opacity:0;z-index:5;animation:weatherFog 3.2s ease-in-out infinite}
 .wv-fog-a{top:23px}.wv-fog-b{top:32px;animation-delay:.35s}.wv-fog-c{top:41px;animation-delay:.7s}
 .wv.cloud{background:linear-gradient(155deg,#b7d5ec,#f1f5f2)}
@@ -472,10 +500,10 @@ body.theme-dark.app-ready{background:#111318}
 .wv.night .wv-cloud:before{background:#c8d0db}.wv.night .wv-cloud:after{background:linear-gradient(180deg,#c8d0db,#8b95a4)}
 .wv.cloud .wv-cloud,.wv.rain .wv-cloud,.wv.storm .wv-cloud,.wv.fog .wv-cloud,.wv.snow .wv-cloud{opacity:1}
 .wv.cloud .wv-cloud-b,.wv.fog .wv-cloud-b{opacity:.7}
-.wv.rain .wv-rain,.wv.storm .wv-rain{opacity:1}
-.wv.storm .wv-bolt{opacity:1}
-.wv.storm:after{opacity:1}
-.wv.snow .wv-rain{opacity:1;background:#fff;height:5px;border-radius:50%;box-shadow:0 0 0 1px rgba(79,147,209,.15)}
+.wv.rain .wv-rain,.wv.storm .wv-rain,.wv.snow .wv-rain{animation:weatherRain .82s linear infinite}
+.wv.storm .wv-bolt{animation:weatherFlash 2.4s steps(1,end) infinite}
+.wv.storm:after{animation:weatherSkyFlash 3.2s steps(1,end) infinite}
+.wv.snow .wv-rain{background:#fff;height:5px;border-radius:50%;box-shadow:0 0 0 1px rgba(79,147,209,.15)}
 .wv.fog .wv-sun,.wv.rain .wv-sun,.wv.storm .wv-sun,.wv.snow .wv-sun{opacity:.45}
 .wv.night.fog .wv-moon,.wv.night.rain .wv-moon,.wv.night.storm .wv-moon,.wv.night.snow .wv-moon{opacity:.72}
 .wv.fog .wv-fog{opacity:1}
@@ -856,6 +884,7 @@ body.theme-dark.app-ready{background:#111318}
     grid-template-columns:1fr 1fr;
     gap:12px;
     align-items:start;
+    margin-bottom:0;
   }
 
   .electric-summary-section > .card,
@@ -866,10 +895,12 @@ body.theme-dark.app-ready{background:#111318}
 
   .electric-metrics-grid{
     grid-column:1 / -1;
-    display:grid;
     grid-template-columns:repeat(3,minmax(0,1fr));
-    gap:8px;
     min-width:0;
+  }
+
+  .electric-kwh-card{
+    grid-column:auto;
   }
 
   .electric-metrics-grid > .card > .cp{
