@@ -1,4 +1,8 @@
-// ─── CONSTANTS ───────────────────────────────────────────────
+// ═══════════════════════════════════════════════════════════════
+// KIPR — APPLICATION CORE
+// ═══════════════════════════════════════════════════════════════
+
+// ─── 1. CONSTANTS & CONFIG ────────────────────────────────────
 const SK='ipon-v5', GK='ipon-gkey', BK='ipon-balance-hidden', SCHEMA_VERSION=2;
 const SUPABASE_URL='https://yzygamcsltydsqsyzqbj.supabase.co';
 const SUPABASE_KEY='sb_publishable_eWEeUsDYUsRGDX5sd7U91Q_sQMUVMUE';
@@ -37,9 +41,28 @@ const DEFAULT_APPLIANCES=[
   {id:'ap8',name:'iPad Charger',category:'Chargers',watts:20,qty:1,hoursPerDay:0,daysPerMonth:0,sessionMinutes:120,alwaysOn:false,note:'Log per charge'},
   {id:'ap9',name:'LED Lights',category:'Lighting',watts:9,qty:4,hoursPerDay:0,daysPerMonth:0,sessionMinutes:360,alwaysOn:false,note:'Set qty to number of bulbs; log per lights-on session'}
 ];
+
+// ─── 2. FORMATTERS & UTILS ────────────────────────────────────
 const fmt=n=>'₱'+Number(n).toLocaleString('en-PH',{minimumFractionDigits:0,maximumFractionDigits:0});
 const fmt2=n=>'₱'+Number(n).toLocaleString('en-PH',{minimumFractionDigits:2,maximumFractionDigits:2});
 const fmt3=n=>'₱'+Number(n).toLocaleString('en-PH',{minimumFractionDigits:0,maximumFractionDigits:3});
+
+// ─── 3. DOM ENGINE ────────────────────────────────────────────
+const h=(tag,attrs,...ch)=>{
+  const el=document.createElement(tag);
+  if(attrs)for(const[k,v]of Object.entries(attrs)){
+    if(k==='cls')el.className=v;
+    else if(k.startsWith('on')&&typeof v==='function')el.addEventListener(k.slice(2).toLowerCase(),v);
+    else if(k==='style'&&typeof v==='object')Object.assign(el.style,v);
+    else if(v!=null&&v!==false)el.setAttribute(k,v);
+  }
+  for(const c of ch.flat(Infinity)){if(c==null||c===false)continue;if(typeof c==='string'||typeof c==='number')el.appendChild(document.createTextNode(String(c)));else if(c instanceof Node)el.appendChild(c);}
+  return el;
+};
+const D=(cls,...c)=>h('div',{cls},...c);
+const Sp=(cls,t)=>h('span',{cls},t);
+
+// ─── 4. ELECTRICITY & AIRCON ENGINE ───────────────────────────
 const stockCatFromHome=cat=>cat==='Cleaning Supplies'?'Cleaning':cat==='Laundry'?'Cleaning':cat==='Toiletries & Personal Care'?'Toiletries':cat==='Medicine & First Aid'?'Medicine':cat==='Kitchen Supplies'?'Kitchen':'Others';
 const isGroceryTx=t=>t?.source==='Groceries';
 const isHomeCookedTx=t=>t?.source==='Home-cooked';
@@ -158,7 +181,12 @@ function airconRateForMinute(min,mode='sleep',rates=airconRates(),tempC='',outdo
   const base=m==='eco'?(day?rates.ecoDay:rates.ecoNight):m==='normal'?(day?rates.day:rates.night):(day?rates.sleepDay:rates.sleepNight);
   return base*airconTempFactor(tempC,data)*airconOutdoorFactor(outdoorTemp,data);
 }
-function airconSessionFromMinutes(startMin,totalMinutes,mode='sleep',date,start,end,rates=airconRates(),tempC='',outdoorTemp='',data=S?.data){
+/**
+ * Calculates kWh for an aircon session using a two-phase inverter logic:
+ * 1. Startup phase (0-60m): High consumption as it cools the room.
+ * 2. Running phase (60m+): Stable consumption adjusted by Mode, Set Temp, and Outdoor Temp.
+ */
+ function airconSessionFromMinutes(startMin,totalMinutes,mode='sleep',date,start,end,rates=airconRates(),tempC='',outdoorTemp='',data=S?.data){
   const mins=Math.max(1,Math.round(totalMinutes));
   let kwh=0;
   const useMode=airconModeFrom(mode);
@@ -335,7 +363,20 @@ function electricityCycleEstimate(cycle,data=S?.data){
   const sessionKwh=applianceSessions.reduce((s,u)=>s+usageKwhInRange(u,cr.start,cr.end),0);
   const alwaysKwh=(data?.appliances||[]).filter(a=>a.alwaysOn).reduce((s,a)=>s+applianceAlwaysOnEstimate(a,cr.start,cr.end,data?.meralcoRate||14.3345).kwh,0);
   const totalKwh=airconKwh+tvKwh+sessionKwh+alwaysKwh;
-  return{airconKwh,tvKwh,sessionKwh,alwaysKwh,totalKwh,logs:aircon.length+tv.length+applianceSessions.length};
+
+  const now = new Date();
+  const start = new Date(cycle.start);
+  const end = new Date(cycle.end);
+  const isCurrent = now >= start && now <= end;
+
+  let projectedKwh = totalKwh;
+  if(isCurrent){
+    const elapsedDays = Math.max(0.5, (now - start) / 86400000);
+    const totalDays = Math.round((end - start) / 86400000) + 1;
+    projectedKwh = (totalKwh / elapsedDays) * totalDays;
+  }
+
+  return{airconKwh,tvKwh,sessionKwh,alwaysKwh,totalKwh,projectedKwh,isCurrent,logs:aircon.length+tv.length+applianceSessions.length};
 }
 function electricityDailyChart(cycle,data=S?.data,range='cycle'){
   const usage=data?.airconUsage||[],tvUsage=data?.tvUsage||[],applianceUsage=data?.applianceUsage||[];
@@ -483,6 +524,14 @@ function moonPhaseLabel(time){
     'moon-wane-crescent':'Waning Crescent'
   }[moonPhaseClass(time)]||'Moon';
 }
+function themeFromData(d){
+  const t=d?.theme;
+  if(t==='light'||t==='dark'||t==='nebula')return t;
+  return d?.darkMode?'dark':'light';
+}
+function themeLabel(t){
+  return t==='nebula'?'Nebula':t==='dark'?'Dark':'Light';
+}
 function weatherVisual(w){
   const night=weatherIsNight(w);
   const wrap=D(`wv ${weatherVisualType(w?.code)} ${night?'night':'day'} ${night?moonPhaseClass(w?.time):''}`);
@@ -521,11 +570,20 @@ const INIT={schemaVersion:SCHEMA_VERSION,balance:130000,balanceBase:130000,trans
   airconOutdoorModel:AIRCON_MODEL_PROFILE.outdoorModel,airconCoolingKw:AIRCON_MODEL_PROFILE.coolingKw,airconRatedWatts:AIRCON_MODEL_PROFILE.ratedWatts,airconMinWatts:AIRCON_MODEL_PROFILE.minWatts,airconMaxWatts:AIRCON_MODEL_PROFILE.maxWatts,airconCspf:AIRCON_MODEL_PROFILE.cspf,airconDoeMonthlyKwh:AIRCON_MODEL_PROFILE.doeMonthlyKwh,
   weatherProvider:DEFAULT_WEATHER.provider,weatherLabel:DEFAULT_WEATHER.label,weatherLat:DEFAULT_WEATHER.lat,weatherLon:DEFAULT_WEATHER.lon,weatherElevation:DEFAULT_WEATHER.elevation,weatherApiKey:'',weather:null,
   labels:LABEL_DEFAULTS,
-  tvModel:'Xiaomi TV A Pro 65 2025',tvWatts:175,meralcoReadDay:12,appliances:DEFAULT_APPLIANCES,applianceUsage:[],activeSessions:[]};
+  tvModel:'Xiaomi TV A Pro 65 2025',tvWatts:175,meralcoReadDay:12,appliances:DEFAULT_APPLIANCES,applianceUsage:[],activeSessions:[],stockAlertDismissed:''};
 function expenseTotal(data){return [...(data?.transactions||[]),...(data?.homeExpenses||[])].reduce((s,x)=>s+(parseFloat(x.amount)||0),0);}
 function normalizeBalance(data){
   if(data.balanceBase===undefined||data.balanceBase===null)data.balanceBase=(parseFloat(data.balance)||0)+expenseTotal(data);
   data.balance=(parseFloat(data.balanceBase)||0)-expenseTotal(data);
+  const stocks = data.stocks || [];
+  const dismissed = (data.stockAlertDismissed || '').split('|').filter(Boolean);
+  const stillProblem = dismissed.filter(key => {
+    const [status, id] = key.split(':');
+    const s = stocks.find(x => x.id === id);
+    if (!s) return false;
+    return status === 'out' ? s.quantity <= 0 : (s.quantity > 0 && s.quantity <= s.minQty);
+  });
+  data.stockAlertDismissed = stillProblem.join('|');
   return data;
 }
 function isDaily24hApplianceLog(u){
@@ -611,7 +669,11 @@ function ld(){try{const s=localStorage.getItem(SK);if(s){const d=JSON.parse(s);i
   if(!d.airconOutdoorModel)d.airconOutdoorModel=AIRCON_MODEL_PROFILE.outdoorModel;if(!d.airconCoolingKw)d.airconCoolingKw=AIRCON_MODEL_PROFILE.coolingKw;if(!d.airconRatedWatts)d.airconRatedWatts=AIRCON_MODEL_PROFILE.ratedWatts;if(!d.airconMinWatts)d.airconMinWatts=AIRCON_MODEL_PROFILE.minWatts;if(!d.airconMaxWatts)d.airconMaxWatts=AIRCON_MODEL_PROFILE.maxWatts;if(!d.airconCspf)d.airconCspf=AIRCON_MODEL_PROFILE.cspf;if(!d.airconDoeMonthlyKwh)d.airconDoeMonthlyKwh=AIRCON_MODEL_PROFILE.doeMonthlyKwh;
   if(!d.weatherProvider)d.weatherProvider=DEFAULT_WEATHER.provider;if(!d.weatherLabel)d.weatherLabel=DEFAULT_WEATHER.label;if(!d.weatherLat)d.weatherLat=DEFAULT_WEATHER.lat;if(!d.weatherLon)d.weatherLon=DEFAULT_WEATHER.lon;if(!d.weatherElevation)d.weatherElevation=DEFAULT_WEATHER.elevation;
   if(d.darkMode===undefined)d.darkMode=false;
+  if(!d.theme)d.theme=d.darkMode?'dark':'light';
+  if(!['light','dark','nebula'].includes(d.theme))d.theme=d.darkMode?'dark':'light';
+  d.darkMode=d.theme==='dark';
   if(d.airconDefaultSleepMode===undefined)d.airconDefaultSleepMode=true;if(!d.airconDefaultMode)d.airconDefaultMode=d.airconDefaultSleepMode===false?'normal':'sleep';if(d.airconDefaultTemp===undefined)d.airconDefaultTemp='29';
+  if(d.stockAlertDismissed===undefined)d.stockAlertDismissed='';
   const out=normalizeBalance(mergeDaily24hApplianceLogs(d));if(out._mergedDaily24hDeletedIds?.length)sd(out);return out;}}catch{}return JSON.parse(JSON.stringify(INIT));}
 function sd(d){try{localStorage.setItem(SK,JSON.stringify(d));}catch{}}
 function lk(){return localStorage.getItem(GK)||'';}
@@ -805,6 +867,7 @@ let S={
   tab:'dash',data:ld(),geminiKey:lk(),drawerOpen:false,
   balanceHidden:lbHidden(),
   tipsOpen:false,
+  shoppingListOpen:false,
   airconHistoryOpen:true,tvHistoryOpen:true,applianceHistoryOpen:true,
   user:null,syncErr:'',syncSaving:false,
   modal:null,viewMk:curMk(),billsMk:curMk(),chartCycleKey:'',chartMonthKey:curMk(),selectedMealDate:toStr(),
@@ -831,7 +894,7 @@ let S={
   // scan
   scanImg:null,scanMime:'',scanning:false,scanData:null,scanErr:'',addedIdx:new Set(),
   // filters
-  pCat:'All',pSearch:'',homeCat:'All',stockCat:'All',stockStatus:'All',stockAlertDismissed:'',
+  pCat:'All',pSearch:'',homeCat:'All',stockCat:'All',stockStatus:'All',
   multiFood:false,multiHome:false,selFood:new Set(),selHome:new Set(),
   // edit
   editType:null,editId:null,editDraft:null,batchType:null,batchDraft:null,
@@ -1067,16 +1130,22 @@ function stopActiveSession(id){
 }
 function saveAirSet() {
   const f = S.airSetF;
-  setD(d => ({
-    ...d,
-    meralcoRate: parseFloat(f.rate) || d.meralcoRate,
-    meralcoReadDay: parseInt(f.readDay) || d.meralcoReadDay,
+  const updates = {
+    meralcoRate: parseFloat(f.rate),
+    meralcoReadDay: parseInt(f.readDay),
     airconDefaultMode: airconModeFrom(f.defaultMode, f.defaultSleep),
     airconDefaultSleepMode: airconModeFrom(f.defaultMode, f.defaultSleep) === 'sleep',
-    airconDefaultTemp: numIn(f.defaultTemp, d.airconDefaultTemp || 29, 16, 32)
-  }));
+    airconDefaultTemp: numIn(f.defaultTemp, 29, 16, 32)
+  };
+  setD(d => ({ ...d, ...updates }));
   set({ modal: null });
 }
+
+/**
+ * Returns a standardized profile of the current Aircon settings.
+ * Consolidating this into a getter makes it easier for an AI to 
+ * see exactly what data the consumption engine depends on.
+ */
 function airconProfile(data=S.data){
   return{
     model:data.airconModel||AIRCON_MODEL_PROFILE.model,
@@ -1087,17 +1156,17 @@ function airconProfile(data=S.data){
     maxWatts:parseFloat(data.airconMaxWatts)||AIRCON_MODEL_PROFILE.maxWatts,
     cspf:parseFloat(data.airconCspf)||AIRCON_MODEL_PROFILE.cspf,
     doeMonthlyKwh:parseFloat(data.airconDoeMonthlyKwh)||AIRCON_MODEL_PROFILE.doeMonthlyKwh,
-    startup: data.airconStartupRate || DEFAULT_AIRCON_RATES.startup,
-    sleepDay: data.airconSleepDayRate || DEFAULT_AIRCON_RATES.sleepDay,
-    sleepNight: data.airconSleepNightRate || DEFAULT_AIRCON_RATES.sleepNight,
-    ecoDay: data.airconEcoDayRate || DEFAULT_AIRCON_RATES.ecoDay,
-    ecoNight: data.airconEcoNightRate || DEFAULT_AIRCON_RATES.ecoNight,
-    day: data.airconDayRate || DEFAULT_AIRCON_RATES.day,
-    night: data.airconNightRate || DEFAULT_AIRCON_RATES.night,
-    tempBaseline: data.airconTempBaseline || 29,
-    tempStep: data.airconTempStepPct || 7,
-    outdoorBaseline: data.airconOutdoorBaseline || 30,
-    outdoorStep: data.airconOutdoorStepPct || 2.5
+    startup: data.airconStartupRate ?? DEFAULT_AIRCON_RATES.startup,
+    sleepDay: data.airconSleepDayRate ?? DEFAULT_AIRCON_RATES.sleepDay,
+    sleepNight: data.airconSleepNightRate ?? DEFAULT_AIRCON_RATES.sleepNight,
+    ecoDay: data.airconEcoDayRate ?? DEFAULT_AIRCON_RATES.ecoDay,
+    ecoNight: data.airconEcoNightRate ?? DEFAULT_AIRCON_RATES.ecoNight,
+    day: data.airconDayRate ?? DEFAULT_AIRCON_RATES.day,
+    night: data.airconNightRate ?? DEFAULT_AIRCON_RATES.night,
+    tempBaseline: data.airconTempBaseline ?? 29,
+    tempStep: data.airconTempStepPct ?? 7,
+    outdoorBaseline: data.airconOutdoorBaseline ?? 30,
+    outdoorStep: data.airconOutdoorStepPct ?? 2.5
   };
 }
 function openAirconProfile(){
@@ -1139,7 +1208,8 @@ function saveTvProfile(){
 }
 function openSettings(){
   const ws=weatherSettings(S.data);
-  set({modal:'settings',drawerOpen:false,settingsF:{geminiKey:S.geminiKey,darkMode:!!S.data.darkMode,weatherProvider:ws.provider,weatherLabel:ws.label,weatherLat:String(ws.lat),weatherLon:String(ws.lon),weatherElevation:String(ws.elevation),weatherApiKey:ws.apiKey||''}});
+  const theme=themeFromData(S.data);
+  set({modal:'settings',drawerOpen:false,settingsF:{geminiKey:S.geminiKey,theme,darkMode:theme==='dark',weatherProvider:ws.provider,weatherLabel:ws.label,weatherLat:String(ws.lat),weatherLon:String(ws.lon),weatherElevation:String(ws.elevation),weatherApiKey:ws.apiKey||''}});
 }
 function openListsDefaults(){
   const d=S.data;
@@ -1170,7 +1240,8 @@ function saveSettings(){
   const old=weatherSettings(S.data);
   const next={provider:f.weatherProvider||'open-meteo',label:f.weatherLabel||DEFAULT_WEATHER.label,lat:parseFloat(f.weatherLat)||DEFAULT_WEATHER.lat,lon:parseFloat(f.weatherLon)||DEFAULT_WEATHER.lon,elevation:parseFloat(f.weatherElevation)||DEFAULT_WEATHER.elevation,apiKey:f.weatherApiKey||''};
   const changed=old.lat!==next.lat||old.lon!==next.lon||old.provider!==next.provider;
-  setD(d=>({...d,darkMode:!!f.darkMode,weatherProvider:next.provider,weatherLabel:next.label,weatherLat:next.lat,weatherLon:next.lon,weatherElevation:next.elevation,weatherApiKey:next.apiKey,weather:changed?null:d.weather}));
+  const theme=['light','dark','nebula'].includes(f.theme)?f.theme:(f.darkMode?'dark':'light');
+  setD(d=>({...d,theme,darkMode:theme==='dark',weatherProvider:next.provider,weatherLabel:next.label,weatherLat:next.lat,weatherLon:next.lon,weatherElevation:next.elevation,weatherApiKey:next.apiKey,weather:changed?null:d.weather}));
   set({geminiKey:key,modal:null,weatherErr:''});
   setTimeout(()=>updateWeather(true),50);
 }
@@ -1395,19 +1466,7 @@ function addScanned(item,idx,dest){
 }
 
 // ─── DOM HELPERS ─────────────────────────────────────────────
-function h(tag,attrs,...ch){
-  const el=document.createElement(tag);
-  if(attrs)for(const[k,v]of Object.entries(attrs)){
-    if(k==='cls')el.className=v;
-    else if(k.startsWith('on')&&typeof v==='function')el.addEventListener(k.slice(2).toLowerCase(),v);
-    else if(k==='style'&&typeof v==='object')Object.assign(el.style,v);
-    else if(v!=null&&v!==false)el.setAttribute(k,v);
-  }
-  for(const c of ch.flat(Infinity)){if(c==null||c===false)continue;if(typeof c==='string'||typeof c==='number')el.appendChild(document.createTextNode(String(c)));else if(c instanceof Node)el.appendChild(c);}
-  return el;
-}
-const D=(cls,...c)=>h('div',{cls},...c);
-const Sp=(cls,t)=>h('span',{cls},t);
+// ─── 5. UI COMPONENTS ─────────────────────────────────────────
 const ICONS={
   overview:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 11.5 12 4l9 7.5"/><path d="M5 10.5V20h14v-9.5"/><path d="M9.5 20v-5h5v5"/></svg>',
   food:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 3v8"/><path d="M4.5 3v5.5a2.5 2.5 0 0 0 5 0V3"/><path d="M7 11v10"/><path d="M16.5 3v18"/><path d="M16.5 3c2.2 1.6 3.5 3.9 3.5 6.5 0 2.2-1.2 3.5-3.5 3.5"/></svg>',
@@ -1426,6 +1485,7 @@ const ICONS={
   menu:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16"/><path d="M4 12h16"/><path d="M4 17h16"/></svg>',
   sun:'<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/></svg>',
   moon:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20.4 14.5A8.3 8.3 0 0 1 9.5 3.6 8.3 8.3 0 1 0 20.4 14.5Z"/></svg>',
+  northStar:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2.5 14.2 9.8 21.5 12 14.2 14.2 12 21.5 9.8 14.2 2.5 12 9.8 9.8 12 2.5Z"/><path d="M12 8.5v7"/><path d="M8.5 12h7"/></svg>',
   edit:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5Z"/></svg>',
   trash:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M6 7l1 14h10l1-14"/><path d="M9 7V4h6v3"/></svg>',
   camera:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8h4l2-3h4l2 3h4v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg>',
@@ -1629,17 +1689,23 @@ function pGroups(){
 
 // ─── DRAWER ──────────────────────────────────────────────────
 function renderDrawer(){
-  const darkMode=S.modal==='settings'?!!S.settingsF.darkMode:!!S.data.darkMode;
+  const theme=S.modal==='settings'?(S.settingsF.theme||themeFromData(S.data)):themeFromData(S.data);
+  const darkMode=theme==='dark',nebulaMode=theme==='nebula';
   const drawer=D('drawer'+(S.drawerOpen?' open':''));
   const dov=D('dov'+(S.drawerOpen?' show':''));
   dov.onclick=()=>set({drawerOpen:false});
   const dhdr=D('dr-hdr');
   const logoBtn=h('button',{cls:'dr-logo-btn',type:'button',onClick:()=>set({tab:'dash',drawerOpen:false}),'aria-label':'Go to Overview'});
-  logoBtn.appendChild(h('img',{cls:'dr-logo',src:darkMode?'Kipr-logo-lightg.png':'Kipr-logo-org.png',alt:'kipr'}));
+  logoBtn.appendChild(h('img',{cls:'dr-logo',src:darkMode||nebulaMode?'Kipr-logo-lightg.png':'Kipr-logo-org.png',alt:'kipr'}));
   dhdr.appendChild(logoBtn);
-  const themeBtn=h('button',{cls:'drawer-theme-btn',type:'button',title:darkMode?'Switch to light mode':'Switch to dark mode','aria-label':darkMode?'Switch to light mode':'Switch to dark mode',onClick:e=>{e.stopPropagation();setD(d=>({...d,darkMode:!darkMode}));}});
+  const themeActions=D('drawer-theme-actions');
+  const themeBtn=h('button',{cls:'drawer-theme-btn',type:'button',title:darkMode?'Switch to light mode':'Switch to dark mode','aria-label':darkMode?'Switch to light mode':'Switch to dark mode',onClick:e=>{e.stopPropagation();const next=darkMode?'light':'dark';setD(d=>({...d,theme:next,darkMode:next==='dark'}));}});
   themeBtn.appendChild(iconEl(darkMode?'sun':'moon','drawer-theme-icon app-icon'));
-  dhdr.appendChild(themeBtn);
+  themeActions.appendChild(themeBtn);
+  const nebulaBtn=h('button',{cls:'drawer-theme-btn drawer-nebula-btn'+(nebulaMode?' drawer-theme-active':''),type:'button',title:nebulaMode?'Switch to light mode':'Switch to Nebula theme','aria-label':nebulaMode?'Switch to light mode':'Switch to Nebula theme',onClick:e=>{e.stopPropagation();const next=nebulaMode?'light':'nebula';setD(d=>({...d,theme:next,darkMode:next==='dark'}));}});
+  nebulaBtn.appendChild(iconEl('northStar','drawer-theme-icon app-icon'));
+  themeActions.appendChild(nebulaBtn);
+  dhdr.appendChild(themeActions);
   drawer.appendChild(dhdr);
   const items=D('dr-items');
   const drItem=(icon,lbl,sub,fn,active)=>{
@@ -2246,22 +2312,45 @@ function renderStocks(){
   const acts=D('');acts.style.cssText='display:flex;gap:6px';
   acts.appendChild(Btn('bp bsm','+ Item',()=>set({modal:'addStock'})));
   toprow.appendChild(acts);sec.appendChild(toprow);
+
+  const needsBuying = stocks.filter(s => s.quantity <= s.minQty);
+  if(needsBuying.length){
+    const sl = D('card'); sl.style.cssText = 'border:1.5px dashed var(--amber);background:var(--warn-bg);margin-bottom:12px;overflow:hidden';
+    const slh = h('button', {cls:'dash-tips-toggle', style:'border-bottom:none;background:transparent', onClick:()=>set({shoppingListOpen:!S.shoppingListOpen})});
+    slh.appendChild(h('span',{cls:'lbl', style:'color:var(--amber)'},'🛒 Shopping List'));
+    slh.appendChild(h('span',{style:'font-size:10.5px;color:var(--amber);font-weight:700'}, `${needsBuying.length} items ${S.shoppingListOpen?'▴':'▾'}`));
+    sl.appendChild(slh);
+    if(S.shoppingListOpen){
+      const slp = D('cp'); slp.style.paddingTop = '0';
+      needsBuying.forEach(s => {
+        const row = D('row'); row.style.cssText = 'padding:7px 0;border-bottom:1px solid rgba(184,114,12,0.1);font-size:12px';
+        row.innerHTML = `<span>${s.name}</span><span style="font-weight:800;color:var(--amber)">${s.quantity <= 0 ? 'OUT' : 'LOW'}</span>`;
+        slp.appendChild(row);
+      });
+      sl.appendChild(slp);
+    }
+    sec.appendChild(sl);
+  }
+
   // Status chips
   const chips=D('chips');
   ['All','Low Stock','Out of Stock'].forEach(s=>{const c=D('chip'+(S.stockStatus===s?' chip-on':''));c.textContent=s==='All'?'All':s==='Low Stock'?'Low':'Out';c.onclick=()=>set({stockStatus:s});chips.appendChild(c);});
   ['All',...SCATS].forEach(cat=>{const c=D('chip'+(S.stockCat===cat?' chip-on':''));c.textContent=cat;c.onclick=()=>set({stockCat:cat});chips.appendChild(c);});
   sec.appendChild(chips);
   // Stats
-  const outItems=stocks.filter(s=>s.quantity<=0);
-  const lowItems=stocks.filter(s=>s.quantity>0&&s.quantity<=s.minQty);
-  const alertSig=[...outItems.map(s=>'out:'+s.id+':'+s.quantity),...lowItems.map(s=>'low:'+s.id+':'+s.quantity)].sort().join('|');
-  if((outItems.length||lowItems.length)&&S.stockAlertDismissed!==alertSig){
+  const outItems=stocks.filter(s=>s.quantity<=0), lowItems=stocks.filter(s=>s.quantity>0&&s.quantity<=s.minQty);
+  const dismissed=(data.stockAlertDismissed||'').split('|').filter(Boolean);
+  const notifyOut=outItems.filter(s=>!dismissed.includes('out:'+s.id)), notifyLow=lowItems.filter(s=>!dismissed.includes('low:'+s.id));
+  if(notifyOut.length||notifyLow.length){
     const ac=D('card');ac.style.cssText='background:#fdecea;border:1px solid #f5c2c2;margin-bottom:9px';
     const acp=D('cp');
-    const close=h('button',{cls:'del',style:'float:right;margin:-4px -4px 4px 8px;color:#b83030',onClick:()=>set({stockAlertDismissed:alertSig})},'×');
+    const close=h('button',{cls:'del',style:'float:right;margin:-4px -4px 4px 8px;color:#b83030',onClick:()=>setD(d=>{
+      const toAdd=[...notifyOut.map(s=>'out:'+s.id),...notifyLow.map(s=>'low:'+s.id)];
+      return {...d, stockAlertDismissed:[...new Set([...(d.stockAlertDismissed||'').split('|'),...toAdd])].filter(Boolean).join('|')};
+    })},'×');
     acp.appendChild(close);
-    if(outItems.length)acp.appendChild(h('div',{style:'font-size:12.5px;color:#b83030;font-weight:700;margin-bottom:4px'},`Out of stock: ${outItems.map(s=>s.name).join(', ')}`));
-    if(lowItems.length)acp.appendChild(h('div',{style:'font-size:12.5px;color:#b8720c;font-weight:700'},`Running low: ${lowItems.map(s=>s.name).join(', ')}`));
+    if(notifyOut.length)acp.appendChild(h('div',{style:'font-size:12.5px;color:#b83030;font-weight:700;margin-bottom:4px'},`Out of stock: ${notifyOut.map(s=>s.name).join(', ')}`));
+    if(notifyLow.length)acp.appendChild(h('div',{style:'font-size:12.5px;color:#b8720c;font-weight:700'},`Running low: ${notifyLow.map(s=>s.name).join(', ')}`));
     ac.appendChild(acp);sec.appendChild(ac);
   }
   let filtered=stocks;
@@ -2497,7 +2586,18 @@ function renderAircon(){
   sec.appendChild(toprow);
 
   const electricSummary=D('electric-summary-section');
-  const hero=D('card cg electric-hero-card');hero.innerHTML=`<div class="cp"><div class="lblw">${cycleLabel(selectedCycle)} Est. Electricity</div><div class="sf" style="font-size:32px;color:#fff;margin:2px 0">${fmt2(mCost+tvCost+applianceCost)}</div><div style="font-size:11px;color:rgba(255,255,255,.55)">Total ${displayCycleKwh.toFixed(2)} kWh${meralcoCycleKwh?' Meralco':' estimated'} · Read day ${readDay} · 24/7 ${fmt2(alwaysOnCost)} · Sessions ${fmt2(applianceSessionCost)} · Aircon ${durationLabel(mHours*60)} · TV ${durationLabel(tvHours*60)}</div></div>`;
+  const est = electricityCycleEstimate(selectedCycle, data);
+  const projCost = est.projectedKwh * (data.meralcoRate || 14.3345);
+
+  const hero=D('card cg electric-hero-card');
+  let heroInner = `<div class="cp"><div class="lblw">${cycleLabel(selectedCycle)} Est. Electricity</div><div class="sf" style="font-size:32px;color:#fff;margin:2px 0">${fmt2(mCost+tvCost+applianceCost)}</div>`;
+  if(est.isCurrent && !meralcoCycleKwh) {
+    heroInner += `<div style="font-size:11px;color:rgba(255,255,255,.75)">Projected Bill: <strong style="color:#ffd07a">${fmt(projCost)}</strong> (${est.projectedKwh.toFixed(1)} kWh)</div>`;
+  } else {
+    heroInner += `<div style="font-size:11px;color:rgba(255,255,255,.55)">Total ${displayCycleKwh.toFixed(2)} kWh${meralcoCycleKwh?' Meralco':' estimated'} · Read day ${readDay}</div>`;
+  }
+  heroInner += `<div style="font-size:10px;color:rgba(255,255,255,.4);margin-top:4px">24/7 ${fmt2(alwaysOnCost)} · Sessions ${fmt2(applianceSessionCost)} · Aircon ${fmt2(mCost)} · TV ${fmt2(tvCost)}</div></div>`;
+  hero.innerHTML = heroInner;
   electricSummary.appendChild(hero);
 
   electricSummary.appendChild(renderWeatherCard(data,{title:'Outdoor Weather'}));
@@ -3219,13 +3319,17 @@ function renderModal(){
     c.appendChild(syncCard);
     const themeCard=D('settings-theme-card');
     const themeCopy=D('');
-    themeCopy.appendChild(h('div',{cls:'settings-theme-title'},'Dark Mode'));
-    themeCopy.appendChild(h('div',{cls:'settings-theme-sub'},f.darkMode?'Dark':'Light'));
+    if(!f.theme)f.theme=f.darkMode?'dark':'light';
+    themeCopy.appendChild(h('div',{cls:'settings-theme-title'},'Theme'));
+    themeCopy.appendChild(h('div',{cls:'settings-theme-sub'},themeLabel(f.theme)));
     const themeRight=D('settings-theme-right');
-    themeRight.appendChild(h('span',{cls:'settings-theme-mode'},f.darkMode?'Dark':'Light'));
-    const themeToggle=h('button',{cls:'theme-switch'+(f.darkMode?' theme-switch-on':''),type:'button','aria-pressed':f.darkMode?'true':'false','aria-label':'Toggle dark mode'});
-    themeToggle.appendChild(D('theme-switch-knob'));
-    themeToggle.onclick=()=>{f.darkMode=!f.darkMode;render();};
+    const themeToggle=D('theme-segmented');
+    [['light','sun','Light'],['dark','moon','Dark'],['nebula','northStar','Nebula']].forEach(([value,icon,label])=>{
+      const active=f.theme===value;
+      const btn=h('button',{cls:'theme-option'+(active?' theme-option-on':''),type:'button','aria-pressed':active?'true':'false','aria-label':label,onClick:()=>{f.theme=value;f.darkMode=value==='dark';render();}});
+      btn.appendChild(iconEl(icon,'theme-option-icon app-icon'));
+      themeToggle.appendChild(btn);
+    });
     themeCard.appendChild(themeCopy);
     themeRight.appendChild(themeToggle);
     themeCard.appendChild(themeRight);
@@ -3430,24 +3534,33 @@ function renderModal(){
 const TABS=[{id:'dash',icon:'overview',label:'Home'},{id:'food',icon:'food',label:'Food'},{id:'home',icon:'home',label:'Home'},{id:'bills',icon:'bills',label:'Bills'},{id:'aircon',icon:'electric',label:'Electric'},{id:'scan',icon:'scan',label:'Scan'}];
 const SCREEN_LABELS={dash:'Overview',food:'Food Expenses',home:'Home & Toiletries',bills:'Bills',prices:'Price Comparison',scan:'AI Scanner',reports:'Reports',stocks:'Pantry & Stocks',aircon:'Electricity Usage',appliances:'Appliance Manager',lists:'Lists & Defaults'};
 
-function render(){
+// ─── 6. ROUTING & RENDERING ───────────────────────────────────
+function render() {
   ensureLiveTick();
   openSw=null;
   rememberContentScroll();
-  const root=document.getElementById('app');root.innerHTML='';
+  const root=document.getElementById('app');
+  if(!root) return;
+  root.innerHTML='';
   document.body.classList.add('app-ready');
-  const darkMode=S.modal==='settings'?!!S.settingsF.darkMode:!!S.data.darkMode;
-  document.body.classList.toggle('theme-dark',darkMode);
-  root.classList.toggle('theme-dark',darkMode);
-  root.style.background=darkMode?'#15181e':'#f4f0ea';
-  const app=D('');app.style.cssText=`margin:0 auto;height:100vh;height:100svh;background:${darkMode?'#15181e':'#f4f0ea'};display:flex;flex-direction:column;overflow:hidden;min-height:0`;app.className='bt-app';
-  app.classList.toggle('theme-dark',darkMode);
-  // Close swipe on tap outside
+  
+  const theme = S.modal === 'settings' ? (S.settingsF.theme || themeFromData(S.data)) : themeFromData(S.data);
+  const darkMode = theme === 'dark';
+  const nebulaMode = theme === 'nebula';
+  document.body.classList.toggle('theme-dark', darkMode);
+  document.body.classList.toggle('theme-nebula', nebulaMode);
+  root.classList.toggle('theme-dark', darkMode);
+  root.classList.toggle('theme-nebula', nebulaMode);
+  const appBg=nebulaMode?'#0B0E1A':darkMode?'#15181e':'#f4f0ea';
+  root.style.background = appBg;
+
+  const app=D('bt-app'+(nebulaMode?' theme-nebula':darkMode?' theme-dark':''));
+  app.style.cssText=`margin:0 auto;height:100vh;height:100svh;background:${appBg};display:flex;flex-direction:column;overflow:hidden;min-height:0`;
   app.addEventListener('touchstart',e=>{if(openSw&&!openSw.contains(e.target)){const c=openSw.querySelector('.swc');if(c){c.style.transition='transform .15s ease';c.style.transform='';}openSw=null;}},{passive:true});
-  // Drawer
+
   app.appendChild(renderDrawer());
-  // Header
-  const hdr=h('div',{cls:'hdr'});const hrow=h('div',{cls:'hrow'});
+
+  const hdr=h('div',{cls:'hdr'}); const hrow=h('div',{cls:'hrow'});
   hrow.appendChild(h('button',{cls:'h-menu',onClick:()=>set({drawerOpen:true}),'aria-label':'Open menu'},iconEl('menu','h-menu-icon app-icon')));
   const hmid=D('h-mid');hmid.appendChild(Object.assign(D('htitle'),{textContent:SCREEN_LABELS[S.tab]||'kipr'}));hmid.appendChild(Object.assign(D('hsub'),{textContent:'Budget · Prices · Savings'}));
   const hbal=D('h-bal');hbal.appendChild(Object.assign(D('hbl'),{textContent:'Balance'}));
