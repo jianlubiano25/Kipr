@@ -680,7 +680,7 @@ function lk(){return localStorage.getItem(GK)||'';}
 function sk(k){k?localStorage.setItem(GK,k):localStorage.removeItem(GK);}
 function lbHidden(){try{return localStorage.getItem(BK)==='1';}catch{return false;}}
 function sbHidden(v){try{v?localStorage.setItem(BK,'1'):localStorage.removeItem(BK);}catch{}}
-const supa=window.supabase?.createClient?.(SUPABASE_URL,SUPABASE_KEY)||null;
+let supa=null;
 let cloudSaveTimer=null;
 let cloudLoadedFor='';
 let liveChannel=null;
@@ -799,7 +799,8 @@ async function upsertLiveRows(rows){
   return{ok:true};
 }
 async function cloudSave(data=S.data,previous=null){
-  if(!supa||!S?.user)return;
+  const s = supa;
+  if(!s||!S?.user)return;
   S.syncSaving=true;S.syncErr='';render();
   const rows=rowsFromData(data,!previous,previous);
   const result=await upsertLiveRows(rows);
@@ -813,11 +814,12 @@ async function cloudSave(data=S.data,previous=null){
   render();
 }
 async function cloudLoad(){
-  if(!supa||!S?.user)return;
+  const s = supa;
+  if(!s||!S?.user)return;
   if(cloudLoadedFor===S.user.id)return;
   cloudLoadedFor=S.user.id;
   S.syncSaving=true;S.syncErr='';render();
-  const {data:rows,error}=await supa.from(LIVE_SYNC_TABLE).select('collection,item_id,data,deleted,updated_at').eq('user_id',S.user.id).order('updated_at',{ascending:false});
+  const {data:rows,error}=await s.from(LIVE_SYNC_TABLE).select('collection,item_id,data,deleted,updated_at').eq('user_id',S.user.id).order('updated_at',{ascending:false});
   S.syncSaving=false;
   if(error){cloudLoadedFor='';S.syncErr=error.message;render();return;}
   if(rows?.length){
@@ -831,8 +833,9 @@ async function cloudLoad(){
   startLiveSync();
 }
 function startLiveSync(){
-  if(!supa||!S?.user||liveChannel)return;
-  liveChannel=supa.channel('kipr-live-'+S.user.id)
+  const s = supa;
+  if(!s||!S?.user||liveChannel)return;
+  liveChannel=s.channel('kipr-live-'+S.user.id)
     .on('postgres_changes',{event:'*',schema:'public',table:LIVE_SYNC_TABLE,filter:`user_id=eq.${S.user.id}`},payload=>{
       const row=payload.new||payload.old;if(!row||liveApplying)return;
       const prev=S.data;
@@ -849,7 +852,8 @@ function startLiveSync(){
     .subscribe();
 }
 async function initCloud(){
-  if(!supa)return;
+  if(!window.supabase)return;
+  if(!supa) supa = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
   const {data}=await supa.auth.getSession();
   if(data?.session?.user){S.user=data.session.user;render();cloudLoad();}
   supa.auth.onAuthStateChange((event,session)=>{
@@ -1703,7 +1707,7 @@ function renderDrawer(){
   dov.onclick=()=>set({drawerOpen:false});
   const dhdr=D('dr-hdr');
   const logoBtn=h('button',{cls:'dr-logo-btn',type:'button',onClick:()=>set({tab:'dash',drawerOpen:false}),'aria-label':'Go to Overview'});
-  logoBtn.appendChild(h('img',{cls:'dr-logo',src:darkMode||nebulaMode?'Kipr-logo-lightg.png':'Kipr-logo-org.png',alt:'kipr'}));
+  logoBtn.appendChild(h('img',{cls:'dr-logo',src:darkMode||nebulaMode?'Kipr-logo-lightg.webp':'Kipr-logo-org.webp',alt:'kipr'}));
   dhdr.appendChild(logoBtn);
   const themeActions=D('drawer-theme-actions');
   const themeBtn=h('button',{cls:'drawer-theme-btn',type:'button',title:darkMode?'Switch to light mode':'Switch to dark mode','aria-label':darkMode?'Switch to light mode':'Switch to dark mode',onClick:e=>{e.stopPropagation();const next=darkMode?'light':'dark';setD(d=>({...d,theme:next,darkMode:next==='dark'}));}});
@@ -2503,7 +2507,10 @@ function renderCurrentlyOn(data=S.data){
       const est=activeEstimate(s,new Date(),data);
       const inner=D('row cr row-line');inner.style.gap='9px';
       const left=D('');left.style.cssText='flex:1;min-width:0';
-      left.appendChild(h('div',{style:'font-size:12.5px;font-weight:700'},s.name));
+      const nRow=D('row');nRow.style.cssText='justify-content:flex-start;gap:6px';
+      nRow.appendChild(h('span',{style:'font-size:12.5px;font-weight:700'},s.name));
+      if(s.watts) nRow.appendChild(Sp('bdg bdg-ap',`${s.watts}W`));
+      left.appendChild(nRow);
       left.appendChild(h('div',{style:'font-size:10.5px;color:#8a7260'},`${s.type==='aircon'?'Aircon · '+airconModeLabel(s.mode,s.sleepMode):s.type==='tv'?'TV':'Appliance'} · on since ${fmtTime12(timeOf(new Date(s.startedAt)))} · ${durationLabel(est.minutes)}${s.outdoorTemp!==''&&s.outdoorTemp!=null?' · out '+s.outdoorTemp+'C':''}`));
       const right=D('');right.style.cssText='text-align:right;flex-shrink:0';
       right.appendChild(h('div',{cls:'sf',style:'font-size:15px'},`${est.kwh.toFixed(3)} kWh`));
@@ -3265,10 +3272,10 @@ function renderModal(){
     const selected=sessionApps.find(a=>a.id===S.applianceSessionF.applianceId)||sessionApps[0];
     if(!S.applianceSessionF.applianceId)S.applianceSessionF.applianceId=selected.id;
     c.appendChild(Fg('Appliance',Sel(S.applianceSessionF.applianceId,sessionApps.map(a=>a.id),v=>{
-      const ap=sessionApps.find(a=>a.id===v),start=S.applianceSessionF.start||timeOf(new Date()),mins=parseFloat(ap?.sessionMinutes)||60;
+      const ap=sessionApps.find(a=>a.id===v),start=S.applianceSessionF.start||timeOf(new Date()),mins=parseFloat(ap?.sessionMinutes)||60; // Removed render() call here, as it's not needed and can cause issues
       S.applianceSessionF.applianceId=v;S.applianceSessionF.start=start;S.applianceSessionF.end=timePlus(start,mins);S.applianceSessionF.minutes=String(mins);render();
     })));
-    c.lastChild.querySelector('select').querySelectorAll('option').forEach(op=>{const ap=sessionApps.find(a=>a.id===op.value);if(ap)op.textContent=ap.name;});
+    c.lastChild.querySelector('select').querySelectorAll('option').forEach(op=>{const ap=sessionApps.find(a=>a.id===op.value);if(ap)op.textContent=`${ap.name}${ap.watts ? ` ${ap.watts}W` : ''}`;});
     const di=Inp('',{type:'date',value:S.applianceSessionF.date});di.oninput=e=>S.applianceSessionF.date=e.target.value;c.appendChild(Fg('Date',di));
     if(!S.applianceSessionF.start)S.applianceSessionF.start=timeOf(new Date());
     if(!S.applianceSessionF.end)S.applianceSessionF.end=timePlus(S.applianceSessionF.start,selected.sessionMinutes||60);
@@ -3510,7 +3517,7 @@ function renderModal(){
           const ap=sessionApps.find(a=>a.id===v),start=dr.start||'19:00',mins=parseFloat(ap?.sessionMinutes)||parseFloat(dr.minutes)||60;
           dr.applianceId=v;dr.start=start;dr.end=timePlus(start,mins);dr.minutes=mins;render();
         })));
-        c.lastChild.querySelector('select').querySelectorAll('option').forEach(op=>{const ap=sessionApps.find(a=>a.id===op.value);if(ap)op.textContent=ap.name;});
+        c.lastChild.querySelector('select').querySelectorAll('option').forEach(op=>{const ap=sessionApps.find(a=>a.id===op.value);if(ap)op.textContent=`${ap.name}${ap.watts ? ` ${ap.watts}W` : ''}`;});
       }
       if(!dr.start)dr.start='19:00';if(!dr.end)dr.end=timePlus(dr.start,parseFloat(dr.minutes)||60)||'20:00';
       const g2=D('g2');
@@ -3555,10 +3562,8 @@ const SCREEN_LABELS={dash:'Overview',food:'Food Expenses',home:'Home & Toiletrie
 function render() {
   ensureLiveTick();
   openSw=null;
-  rememberContentScroll();
   const root=document.getElementById('app');
   if(!root) return;
-  root.innerHTML='';
   document.body.classList.add('app-ready');
   
   const theme = S.modal === 'settings' ? (S.settingsF.theme || themeFromData(S.data)) : themeFromData(S.data);
@@ -3618,10 +3623,10 @@ function render() {
   });
   app.appendChild(tb);
   const modal=renderModal();if(modal)app.appendChild(modal);
-  root.appendChild(app);
+  root.replaceChildren(app);
+
   if(scrollByTab[S.tab]){
     const top=scrollByTab[S.tab];
-    content.scrollTop=top;
     requestAnimationFrame(()=>{content.scrollTop=top;});
   }
   const splash=document.getElementById('splash');
@@ -3638,4 +3643,6 @@ function render() {
 }
 
 render();
-initCloud();
+window.addEventListener('load', () => {
+  setTimeout(initCloud, 200);
+});
