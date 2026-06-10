@@ -921,12 +921,16 @@ function setD(fn){
 
 function ensureLiveTick(){
   const hasActive=(S.data.activeSessions||[]).length>0;
-  if(hasActive&&!liveTick)liveTick=setInterval(()=>{if((S.data.activeSessions||[]).length&&!S.modal)render();},30000);
+  if(hasActive&&!liveTick)liveTick=setInterval(()=>{
+    // Prevent re-render if a modal is open to avoid disrupting input fields
+    if((S.data.activeSessions||[]).length&&!S.modal)render();
+  },30000);
   if(!hasActive&&liveTick){clearInterval(liveTick);liveTick=null;}
 }
 
 async function updateWeather(force=false){
-  if(S.weatherLoading||(!force&&!weatherStale(S.data)))return;
+  // Prevent weather update if a modal is open, to avoid disrupting input fields
+  if(S.modal||S.weatherLoading||(!force&&!weatherStale(S.data)))return;
   const ws=weatherSettings(S.data);
   if(ws.provider!=='open-meteo')return;
   S.weatherLoading=true;S.weatherErr='';render();
@@ -942,7 +946,10 @@ async function updateWeather(force=false){
     S.weatherLoading=false;S.weatherErr=e.message||'Weather unavailable';render();
   }
 }
-function ensureWeather(){if(!S.modal&&!S.weatherLoading&&weatherStale(S.data))updateWeather();}
+function ensureWeather(){
+  // Prevent weather update if a modal is open, to avoid disrupting input fields
+  if(!S.modal&&!S.weatherLoading&&weatherStale(S.data))updateWeather();
+}
 
 // ─── ACTIONS ────────────────────────────────────────────────
 function addTx(){
@@ -1557,7 +1564,7 @@ const Btn=(cls,t,fn,dis)=>h('button',{cls:'btn '+cls,onClick:fn,...(dis?{disable
 const BtnI=(cls,ic,t,fn,dis)=>Btn(cls,iconLabel(ic,t),fn,dis);
 const Inp=(cls,opts)=>h('input',{cls:'inp '+cls,...opts});
 const Sel=(val,opts,fn,cls='')=>{const el=h('select',{cls:'sel '+cls});opts.forEach(o=>{const op=h('option',{value:o},o);if(o===val)op.selected=true;el.appendChild(op);});el.addEventListener('change',e=>fn(e.target.value));return el;};
-const Fg=(lbl,el,sub)=>{const f=D('fg');f.appendChild(h('label',{cls:'fl'},lbl));f.appendChild(el);if(sub)f.appendChild(h('div',{cls:'tiny-muted',style:'margin-top:2px'},sub));return f;};
+const Fg=(lbl,el,sub,id=null)=>{const f=D('fg');if(id)f.id=id;f.appendChild(h('label',{cls:'fl'},lbl));f.appendChild(el);if(sub)f.appendChild(h('div',{cls:'tiny-muted',style:'margin-top:2px'},sub));return f;};
 const Mr=(...bs)=>{const r=D('mr');bs.forEach(b=>r.appendChild(b));return r;};
 const DivHdr=(t)=>{const d=D('section-hdr');d.appendChild(h('span',{cls:'section-hdr-title'},t));return d;};
 function EmptyCard(icon,title){
@@ -3151,8 +3158,8 @@ function renderModal(){
   if(S.modal==='addTx'){
     const c=D('');
     const isHomeCooked=S.txF.source==='Home-cooked';
-    if(!isHomeCooked){
-      const ai=Inp('',{type:'number',inputmode:'decimal',placeholder:'e.g. 150',value:S.txF.amount});ai.oninput=e=>S.txF.amount=e.target.value;setTimeout(()=>ai.focus(),50);
+    if(!isHomeCooked){ 
+      const ai=Inp('',{type:'number',inputmode:'decimal',placeholder:'e.g. 150',value:S.txF.amount});ai.oninput=e=>S.txF.amount=e.target.value;ai.focus();
       c.appendChild(Fg('Subtotal (₱)',ai));
       const dii=Inp('',{type:'number',inputmode:'decimal',placeholder:'Optional',value:S.txF.discount});dii.oninput=e=>S.txF.discount=e.target.value;c.appendChild(Fg('Discount (₱)',dii));
     }
@@ -3170,7 +3177,7 @@ function renderModal(){
   }
   if(S.modal==='addHome'){
     const c=D('');
-    const ni=Inp('',{type:'text',placeholder:'e.g. Dish soap, Shampoo',value:S.homeF.name});ni.oninput=e=>S.homeF.name=e.target.value;setTimeout(()=>ni.focus(),50);c.appendChild(Fg('Item Name',ni));
+    const ni=Inp('',{type:'text',placeholder:'e.g. Dish soap, Shampoo',value:S.homeF.name});ni.oninput=e=>S.homeF.name=e.target.value;ni.focus();c.appendChild(Fg('Item Name',ni));
     const calc=()=>{const gross=(parseFloat(S.homeF.unitPrice)||0)*(parseFloat(S.homeF.qty)||1),discount=Math.max(0,parseFloat(S.homeF.discount)||0),total=Math.max(0,gross-discount);S.homeF.amount=total?total.toFixed(2):'';ti.value=S.homeF.amount;};
     const g2=D('g2');
     const qfg=D('fg');qfg.appendChild(h('label',{cls:'fl'},'Qty'));const qi=Inp('',{type:'number',inputmode:'decimal',value:S.homeF.qty});qi.oninput=e=>{S.homeF.qty=e.target.value;calc();};qfg.appendChild(qi);g2.appendChild(qfg);
@@ -3185,7 +3192,7 @@ function renderModal(){
   }
   if(S.modal==='addPrice'){
     const c=D('');
-    const ni=Inp('',{type:'text',placeholder:'e.g. Galunggong, Shampoo',value:S.priceF.name});ni.oninput=e=>S.priceF.name=e.target.value;setTimeout(()=>ni.focus(),50);c.appendChild(Fg('Item Name',ni));
+    const ni=Inp('',{type:'text',placeholder:'e.g. Galunggong, Shampoo',value:S.priceF.name});ni.oninput=e=>S.priceF.name=e.target.value;ni.focus();c.appendChild(Fg('Item Name',ni));
     const g2=D('g2');
     const pfg=D('fg');pfg.appendChild(h('label',{cls:'fl'},'Price (₱)'));const pi=Inp('',{type:'number',inputmode:'decimal',placeholder:'0',value:S.priceF.price});pi.oninput=e=>S.priceF.price=e.target.value;pfg.appendChild(pi);g2.appendChild(pfg);
     const ufg=D('fg');ufg.appendChild(h('label',{cls:'fl'},'Unit'));ufg.appendChild(Sel(S.priceF.unit,UNITS,v=>S.priceF.unit=v));g2.appendChild(ufg);c.appendChild(g2);
@@ -3196,7 +3203,7 @@ function renderModal(){
   }
   if(S.modal==='addStock'){
     const c=D('');
-    const ni=Inp('',{type:'text',placeholder:'e.g. Rice, eggs, shampoo, dishwashing',value:S.stockF.name});ni.oninput=e=>S.stockF.name=e.target.value;setTimeout(()=>ni.focus(),50);c.appendChild(Fg('Item Name',ni));
+    const ni=Inp('',{type:'text',placeholder:'e.g. Rice, eggs, shampoo, dishwashing',value:S.stockF.name});ni.oninput=e=>S.stockF.name=e.target.value;ni.focus();c.appendChild(Fg('Item Name',ni));
     c.appendChild(Fg('Category',Sel(S.stockF.category,SCATS,v=>S.stockF.category=v)));
     const g2=D('g2');
     const qfg=D('fg');qfg.appendChild(h('label',{cls:'fl'},'Current Qty'));const qi=Inp('',{type:'number',inputmode:'decimal',placeholder:'0',value:S.stockF.quantity});qi.oninput=e=>S.stockF.quantity=e.target.value;qfg.appendChild(qi);g2.appendChild(qfg);
@@ -3208,13 +3215,13 @@ function renderModal(){
   }
   if(S.modal==='addBill'){
     const c=D('');
-    const ni=Inp('',{type:'text',placeholder:'e.g. Water, Phone Plan',value:S.billF.name});ni.oninput=e=>S.billF.name=e.target.value;setTimeout(()=>ni.focus(),50);c.appendChild(Fg('Bill Name',ni));
+    const ni=Inp('',{type:'text',placeholder:'e.g. Water, Phone Plan',value:S.billF.name});ni.oninput=e=>S.billF.name=e.target.value;ni.focus();c.appendChild(Fg('Bill Name',ni));
     c.appendChild(h('p',{style:'font-size:11.5px;color:#8a7260;margin-bottom:12px;line-height:1.5'},'You\'ll enter the amount each month since bills change.'));
     const ca=Btn('bg','Cancel',()=>set({modal:null}));ca.style.flex='1';const sa=Btn('bp','Add',addBill);sa.style.flex='2';c.appendChild(Mr(ca,sa));return M('Add Bill',c);
   }
   if(S.modal==='editBal'){
     const c=D('');
-    const bi=Inp('',{type:'number',inputmode:'decimal',value:S.balInput});bi.oninput=e=>S.balInput=e.target.value;setTimeout(()=>bi.focus(),50);c.appendChild(Fg('Balance (₱)',bi));
+    const bi=Inp('',{type:'number',inputmode:'decimal',value:S.balInput});bi.oninput=e=>S.balInput=e.target.value;bi.focus();c.appendChild(Fg('Balance (₱)',bi));
     c.appendChild(h('p',{style:'font-size:11.5px;color:#8a7260;margin-bottom:12px;line-height:1.5'},'Set to your actual bank/wallet balance.'));
     const ca=Btn('bg','Cancel',()=>set({modal:null}));ca.style.flex='1';const sa=Btn('bp','Update',updBal);sa.style.flex='2';c.appendChild(Mr(ca,sa));return M('Update Balance',c);
   }
@@ -3278,16 +3285,21 @@ function renderModal(){
   }
   if(S.modal==='addAppliance'){
     const c=D('');
-    const ni=Inp('',{type:'text',placeholder:'e.g. Rice cooker, LED bulb',value:S.applianceF.name});ni.oninput=e=>S.applianceF.name=e.target.value;setTimeout(()=>ni.focus(),50);c.appendChild(Fg('Appliance Name',ni));
-    c.appendChild(Fg('Category',Sel(S.applianceF.category,applianceCategories(),v=>S.applianceF.category=v)));
+    const ni=Inp('',{type:'text',placeholder:'e.g. Rice cooker, LED bulb',value:S.applianceF.name});ni.oninput=e=>S.applianceF.name=e.target.value;ni.focus();c.appendChild(Fg('Appliance Name',ni));
+    c.appendChild(Fg('Category',Sel(S.applianceF.category,applianceCategories(),v=>{S.applianceF.category=v;}))); // Removed render()
     const g1=D('g2');
     const wfg=D('fg');wfg.appendChild(h('label',{cls:'fl'},'Watts'));const wi=Inp('',{type:'number',inputmode:'decimal',step:'0.001',placeholder:'e.g. 60',value:S.applianceF.watts});wi.oninput=e=>S.applianceF.watts=e.target.value;wfg.appendChild(wi);g1.appendChild(wfg);
     const qfg=D('fg');qfg.appendChild(h('label',{cls:'fl'},'Qty'));const qi=Inp('',{type:'number',inputmode:'decimal',step:'0.001',placeholder:'1',value:S.applianceF.qty});qi.oninput=e=>S.applianceF.qty=e.target.value;qfg.appendChild(qi);g1.appendChild(qfg);c.appendChild(g1);
     const ar=D('row');ar.style.cssText='justify-content:flex-start;gap:8px;margin:3px 0 12px';
-    const cb=h('input',{type:'checkbox',checked:S.applianceF.alwaysOn,style:'width:18px;height:18px'});cb.onchange=e=>{S.applianceF.alwaysOn=e.target.checked;render();};
+    const cb=h('input',{type:'checkbox',checked:S.applianceF.alwaysOn,style:'width:18px;height:18px'});
+    cb.onchange=e=>{
+      S.applianceF.alwaysOn=e.target.checked;
+      const minutesFg = c.querySelector('#add-appliance-minutes-fg');
+      if (minutesFg) minutesFg.style.display = S.applianceF.alwaysOn ? 'none' : 'block';
+    };
     ar.appendChild(cb);ar.appendChild(h('span',{style:'font-size:12.5px;font-weight:700;color:#3a2818'},'Runs 24/7'));c.appendChild(ar);
     if(!S.applianceF.alwaysOn){
-      const sm=Inp('',{type:'number',inputmode:'decimal',step:'0.001',placeholder:'e.g. 30',value:S.applianceF.sessionMinutes});sm.oninput=e=>S.applianceF.sessionMinutes=e.target.value;c.appendChild(Fg('Default Minutes / Log',sm,`Used when logging appliances. ${durationLabel(S.applianceF.sessionMinutes||60)} by default.`));
+      const sm=Inp('',{type:'number',inputmode:'decimal',step:'0.001',placeholder:'e.g. 30',value:S.applianceF.sessionMinutes});sm.oninput=e=>S.applianceF.sessionMinutes=e.target.value;c.appendChild(Fg('Default Minutes / Log',sm,`Used when logging appliances. ${durationLabel(S.applianceF.sessionMinutes||60)} by default.`,'add-appliance-minutes-fg'));
     }
     const nt=Inp('',{type:'text',placeholder:'Optional notes',value:S.applianceF.note});nt.oninput=e=>S.applianceF.note=e.target.value;c.appendChild(Fg('Notes',nt));
     c.appendChild(h('p',{style:'font-size:11px;color:#8a7260;line-height:1.5;margin-bottom:10px'},S.applianceF.alwaysOn?`24/7 appliances auto-compute monthly using ${fmt(S.data.meralcoRate)}/kWh.`:'Session appliances only count when you log a usage session.'));
@@ -3428,8 +3440,8 @@ function renderModal(){
     if(t==='food'){
       if(dr.grossAmount===undefined)dr.grossAmount=dr.amount||0;if(dr.discount===undefined)dr.discount=0;
       const isHomeCooked=dr.source==='Home-cooked';
-      if(!isHomeCooked){
-        const ai=Inp('',{type:'number',inputmode:'decimal',placeholder:'Subtotal',value:dr.grossAmount});ai.oninput=e=>dr.grossAmount=e.target.value;setTimeout(()=>ai.focus(),50);c.appendChild(Fg('Subtotal (₱)',ai));
+      if(!isHomeCooked){ 
+        const ai=Inp('',{type:'number',inputmode:'decimal',placeholder:'Subtotal',value:dr.grossAmount});ai.oninput=e=>dr.grossAmount=e.target.value;ai.focus();c.appendChild(Fg('Subtotal (₱)',ai));
         const dii=Inp('',{type:'number',inputmode:'decimal',placeholder:'Optional',value:dr.discount||''});dii.oninput=e=>dr.discount=e.target.value;c.appendChild(Fg('Discount (₱)',dii));
       }
       c.appendChild(Fg('Source',Sel(dr.source,foodSources(),v=>{dr.source=v;if(v==='Home-cooked'){dr.grossAmount=0;dr.discount=0;dr.amount=0;}render();})));
@@ -3437,7 +3449,7 @@ function renderModal(){
       const di=Inp('',{type:'date',value:dr.date});di.oninput=e=>dr.date=e.target.value;c.appendChild(Fg('Date',di));
     } else if(t==='home'){
       if(!dr.qty)dr.qty=1;if(!dr.unitPrice)dr.unitPrice=dr.grossAmount||dr.amount||0;if(!dr.unit)dr.unit='pcs';if(dr.discount===undefined)dr.discount=0;
-      const ni=Inp('',{type:'text',value:dr.name||''});ni.oninput=e=>dr.name=e.target.value;setTimeout(()=>ni.focus(),50);c.appendChild(Fg('Item Name',ni));
+      const ni=Inp('',{type:'text',value:dr.name||''});ni.oninput=e=>dr.name=e.target.value;ni.focus();c.appendChild(Fg('Item Name',ni));
       const g2=D('g2');
       const calcHomeEdit=()=>{const total=Math.max(0,(parseFloat(dr.unitPrice)||0)*(parseFloat(dr.qty)||1)-(parseFloat(dr.discount)||0));ai.value=total.toFixed(2);dr.amount=ai.value;};
       const qfg=D('fg');qfg.appendChild(h('label',{cls:'fl'},'Qty'));const qi=Inp('',{type:'number',inputmode:'decimal',value:dr.qty});qi.oninput=e=>{dr.qty=e.target.value;calcHomeEdit();};qfg.appendChild(qi);g2.appendChild(qfg);
@@ -3472,15 +3484,20 @@ function renderModal(){
     } else if(t==='appliance'){
       if(!dr.qty)dr.qty=1;if(!dr.sessionMinutes&&!dr.alwaysOn)dr.sessionMinutes=Math.max(1,Math.round((parseFloat(dr.hoursPerDay)||1)*60));
       const ni=Inp('',{type:'text',value:dr.name||''});ni.oninput=e=>dr.name=e.target.value;c.appendChild(Fg('Appliance Name',ni));
-      c.appendChild(Fg('Category',Sel(dr.category||'Others',applianceCategories(),v=>{dr.category=v;})));
+      c.appendChild(Fg('Category',Sel(dr.category||'Others',applianceCategories(),v=>{dr.category=v;}))); // Removed render()
       const g1=D('g2');
       const wfg=D('fg');wfg.appendChild(h('label',{cls:'fl'},'Watts'));const wi=Inp('',{type:'number',inputmode:'decimal',step:'0.001',value:dr.watts});wi.oninput=e=>dr.watts=e.target.value;wfg.appendChild(wi);g1.appendChild(wfg);
       const qfg=D('fg');qfg.appendChild(h('label',{cls:'fl'},'Qty'));const qi=Inp('',{type:'number',inputmode:'decimal',step:'0.001',value:dr.qty});qi.oninput=e=>dr.qty=e.target.value;qfg.appendChild(qi);g1.appendChild(qfg);c.appendChild(g1);
       const ar=D('row');ar.style.cssText='justify-content:flex-start;gap:8px;margin:3px 0 12px';
-      const acb=h('input',{type:'checkbox',checked:dr.alwaysOn,style:'width:18px;height:18px'});acb.onchange=e=>{dr.alwaysOn=e.target.checked;render();};
+      const acb=h('input',{type:'checkbox',checked:dr.alwaysOn,style:'width:18px;height:18px'});
+      acb.onchange=e=>{
+        dr.alwaysOn=e.target.checked;
+        const minutesFg = c.querySelector('#edit-appliance-minutes-fg');
+        if (minutesFg) minutesFg.style.display = dr.alwaysOn ? 'none' : 'block';
+      };
       ar.appendChild(acb);ar.appendChild(h('span',{style:'font-size:12.5px;font-weight:700;color:#3a2818'},'Runs 24/7'));c.appendChild(ar);
       if(!dr.alwaysOn){
-        const sm=Inp('',{type:'number',inputmode:'decimal',step:'0.001',value:dr.sessionMinutes||60});sm.oninput=e=>dr.sessionMinutes=e.target.value;c.appendChild(Fg('Default Minutes / Log',sm,`${durationLabel(dr.sessionMinutes||60)} by default.`));
+        const sm=Inp('',{type:'number',inputmode:'decimal',step:'0.001',value:dr.sessionMinutes||60});sm.oninput=e=>dr.sessionMinutes=e.target.value;c.appendChild(Fg('Default Minutes / Log',sm,`${durationLabel(dr.sessionMinutes||60)} by default.`,'edit-appliance-minutes-fg'));
       }
       const nt=Inp('',{type:'text',value:dr.note||''});nt.oninput=e=>dr.note=e.target.value;c.appendChild(Fg('Notes',nt));
       const est=applianceMonthly(dr,S.data.meralcoRate);
@@ -3507,15 +3524,15 @@ function renderModal(){
         const di=Inp('',{type:'date',value:dr.date});di.oninput=e=>dr.date=e.target.value;c.appendChild(Fg('Date',di));
       }
     } else if(t==='price'){
-      const ni=Inp('',{type:'text',value:dr.name||''});ni.oninput=e=>dr.name=e.target.value;setTimeout(()=>ni.focus(),50);c.appendChild(Fg('Item Name',ni));
-      const g2=D('g2');
+      const ni=Inp('',{type:'text',value:dr.name||''});ni.oninput=e=>dr.name=e.target.value;ni.focus();c.appendChild(Fg('Item Name',ni));
+      const g2=D('g2'); 
       const pfg=D('fg');pfg.appendChild(h('label',{cls:'fl'},'Price (₱)'));const pi=Inp('',{type:'number',inputmode:'decimal',value:dr.price});pi.oninput=e=>dr.price=e.target.value;pfg.appendChild(pi);g2.appendChild(pfg);
       const ufg=D('fg');ufg.appendChild(h('label',{cls:'fl'},'Unit'));ufg.appendChild(Sel(dr.unit||'pcs',UNITS,v=>{dr.unit=v;}));g2.appendChild(ufg);c.appendChild(g2);
       c.appendChild(Fg('Store',Sel(dr.store||homeStores()[0],homeStores(),v=>{dr.store=v;})));
     } else if(t==='stock'){
-      const ni=Inp('',{type:'text',value:dr.name||''});ni.oninput=e=>dr.name=e.target.value;setTimeout(()=>ni.focus(),50);c.appendChild(Fg('Item Name',ni));
+      const ni=Inp('',{type:'text',value:dr.name||''});ni.oninput=e=>dr.name=e.target.value;ni.focus();c.appendChild(Fg('Item Name',ni));
       c.appendChild(Fg('Category',Sel(dr.category||SCATS[0],SCATS,v=>{dr.category=v;})));
-      const g2=D('g2');
+      const g2=D('g2'); 
       const qfg=D('fg');qfg.appendChild(h('label',{cls:'fl'},'Quantity'));const qi=Inp('',{type:'number',inputmode:'decimal',value:dr.quantity});qi.oninput=e=>dr.quantity=e.target.value;qfg.appendChild(qi);g2.appendChild(qfg);
       const ufg=D('fg');ufg.appendChild(h('label',{cls:'fl'},'Unit'));ufg.appendChild(Sel(dr.unit||'pcs',UNITS,v=>{dr.unit=v;}));g2.appendChild(ufg);c.appendChild(g2);
       const mfg=D('fg');mfg.appendChild(h('label',{cls:'fl'},'Min Qty'));const mi=Inp('',{type:'number',inputmode:'decimal',value:dr.minQty});mi.oninput=e=>dr.minQty=e.target.value;mfg.appendChild(mi);c.appendChild(mfg);
