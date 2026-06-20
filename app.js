@@ -28,7 +28,7 @@ const APPLIANCE_CATS=['Cooling','Kitchen','Network','Security','Computer','Charg
 const DEFAULT_AIRCON_RATES={startup:1.20,sleepDay:0.62,sleepNight:0.48,ecoDay:0.55,ecoNight:0.42,day:0.85,night:0.58};
 const AIRCON_MODES=['Sleep','Eco','Normal'];
 const AIRCON_MODEL_PROFILE={model:'Carrier 42CEA012308',outdoorModel:'38CEA012308',coolingKw:3.33,ratedWatts:1200,minWatts:200,maxWatts:1300,cspf:4.3,doeMonthlyKwh:162};
-const DEFAULT_WEATHER={provider:'open-meteo',label:'Las Pinas, Metro Manila',lat:14.46139,lon:120.97306,elevation:10,apiKey:''};
+const DEFAULT_WEATHER={provider:'open-meteo',label:'',lat:'',lon:'',elevation:'',apiKey:''};
 const LABEL_DEFAULTS={foodSources:FSRC,homeCategories:HCATS,homeStores:STORES,applianceCategories:APPLIANCE_CATS};
 const DEFAULT_APPLIANCES=[
   {id:'ap1',name:'Samsung Wobble Top Load 7kg',category:'Laundry',watts:500,qty:1,hoursPerDay:0,daysPerMonth:0,sessionMinutes:45,alwaysOn:false,note:'Log per laundry session'},
@@ -3362,7 +3362,7 @@ function renderModal(){
     const g2=D('g2');
     const elFg=D('fg');elFg.appendChild(h('label',{cls:'fl'},'Elevation (m)'));const eli=Inp('',{type:'number',inputmode:'decimal',step:'0.1',value:f.weatherElevation});eli.oninput=e=>f.weatherElevation=e.target.value;elFg.appendChild(eli);g2.appendChild(elFg);
     const wkFg=D('fg');wkFg.appendChild(h('label',{cls:'fl'},'Weather API Key'));const wki=Inp('',{type:'password',placeholder:'Optional',value:f.weatherApiKey||''});wki.oninput=e=>f.weatherApiKey=e.target.value;wkFg.appendChild(wki);g2.appendChild(wkFg);c.appendChild(g2);
-    c.appendChild(h('p',{style:'font-size:11px;color:#8a7260;line-height:1.5;margin-bottom:10px'},'Default coordinates are 14.46139, 120.97306 for Las Pinas. Outdoor weather is fetched from Open-Meteo and saved with aircon sessions.'));
+    c.appendChild(h('p',{style:'font-size:11px;color:#8a7260;line-height:1.5;margin-bottom:10px'},'Default coordinates are 'Unset', Outdoor weather is fetched from Open-Meteo and saved with aircon sessions.'));
     const pref=Btn('bgfull','Lists & Defaults',openListsDefaults);pref.style.marginBottom='10px';c.appendChild(pref);
     const rf=Btn('bg','Refresh Weather',()=>updateWeather(true));rf.style.flex='1.2';
     const ca=Btn('bg','Cancel',()=>set({modal:null}));ca.style.flex='1';
