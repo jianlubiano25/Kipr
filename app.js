@@ -668,7 +668,7 @@ function ld(){try{const s=localStorage.getItem(SK);if(s){const d=JSON.parse(s);i
   if(!d.airconNightRate||d.airconNightRate===0.36||d.airconNightRate===0.55)d.airconNightRate=DEFAULT_AIRCON_RATES.night;
   if(!d.airconModel)d.airconModel=AIRCON_MODEL_PROFILE.model;if(!d.airconTempBaseline)d.airconTempBaseline=29;if(!d.airconTempStepPct)d.airconTempStepPct=7;if(!d.airconOutdoorBaseline)d.airconOutdoorBaseline=30;if(!d.airconOutdoorStepPct)d.airconOutdoorStepPct=2.5;
   if(!d.airconOutdoorModel)d.airconOutdoorModel=AIRCON_MODEL_PROFILE.outdoorModel;if(!d.airconCoolingKw)d.airconCoolingKw=AIRCON_MODEL_PROFILE.coolingKw;if(!d.airconRatedWatts)d.airconRatedWatts=AIRCON_MODEL_PROFILE.ratedWatts;if(!d.airconMinWatts)d.airconMinWatts=AIRCON_MODEL_PROFILE.minWatts;if(!d.airconMaxWatts)d.airconMaxWatts=AIRCON_MODEL_PROFILE.maxWatts;if(!d.airconCspf)d.airconCspf=AIRCON_MODEL_PROFILE.cspf;if(!d.airconDoeMonthlyKwh)d.airconDoeMonthlyKwh=AIRCON_MODEL_PROFILE.doeMonthlyKwh;
-if(!d.weatherProvider)d.weatherProvider=DEFAULT_WEATHER.provider;if(!d.weatherLabel)d.weatherLabel=DEFAULT_WEATHER.label;if(!d.weatherLat)d.weatherLat=DEFAULT_WEATHER.lat;if(!d.weatherLon)d.weatherLon=DEFAULT_WEATHER.lon;if(!d.weatherElevation)d.weatherElevation=DEFAULT_WEATHER.elevation;
+if(!d.weatherProvider)d.weatherProvider=DEFAULT_WEATHER.provider;if(!d.weatherLabel)d.weatherLabel=DEFAULT_WEATHER.label;/* weatherLat/weatherLon should remain unset by default */if(!d.weatherElevation)d.weatherElevation=DEFAULT_WEATHER.elevation;
   if(d.darkMode===undefined)d.darkMode=false;
   if(!d.theme)d.theme=d.darkMode?'dark':'light';
   if(!['light','dark','nebula'].includes(d.theme))d.theme=d.darkMode?'dark':'light';
