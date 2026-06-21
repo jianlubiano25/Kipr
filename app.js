@@ -28,7 +28,7 @@ const APPLIANCE_CATS=['Cooling','Kitchen','Network','Security','Computer','Charg
 const DEFAULT_AIRCON_RATES={startup:1.20,sleepDay:0.62,sleepNight:0.48,ecoDay:0.55,ecoNight:0.42,day:0.85,night:0.58};
 const AIRCON_MODES=['Sleep','Eco','Normal'];
 const AIRCON_MODEL_PROFILE={model:'Carrier 42CEA012308',outdoorModel:'38CEA012308',coolingKw:3.33,ratedWatts:1200,minWatts:200,maxWatts:1300,cspf:4.3,doeMonthlyKwh:162};
-const DEFAULT_WEATHER={provider:'open-meteo',label:'',lat:'',lon:'',elevation:'',apiKey:''};
+const DEFAULT_WEATHER={provider:'open-meteo',label:'',lat:null,lon:null,elevation:null,apiKey:''};
 const LABEL_DEFAULTS={foodSources:FSRC,homeCategories:HCATS,homeStores:STORES,applianceCategories:APPLIANCE_CATS};
 const DEFAULT_APPLIANCES=[
   {id:'ap1',name:'Samsung Wobble Top Load 7kg',category:'Laundry',watts:500,qty:1,hoursPerDay:0,daysPerMonth:0,sessionMinutes:45,alwaysOn:false,note:'Log per laundry session'},
@@ -667,7 +667,7 @@ function ld(){try{const s=localStorage.getItem(SK);if(s){const d=JSON.parse(s);i
   if(!d.airconNightRate||d.airconNightRate===0.36||d.airconNightRate===0.55)d.airconNightRate=DEFAULT_AIRCON_RATES.night;
   if(!d.airconModel)d.airconModel=AIRCON_MODEL_PROFILE.model;if(!d.airconTempBaseline)d.airconTempBaseline=29;if(!d.airconTempStepPct)d.airconTempStepPct=7;if(!d.airconOutdoorBaseline)d.airconOutdoorBaseline=30;if(!d.airconOutdoorStepPct)d.airconOutdoorStepPct=2.5;
   if(!d.airconOutdoorModel)d.airconOutdoorModel=AIRCON_MODEL_PROFILE.outdoorModel;if(!d.airconCoolingKw)d.airconCoolingKw=AIRCON_MODEL_PROFILE.coolingKw;if(!d.airconRatedWatts)d.airconRatedWatts=AIRCON_MODEL_PROFILE.ratedWatts;if(!d.airconMinWatts)d.airconMinWatts=AIRCON_MODEL_PROFILE.minWatts;if(!d.airconMaxWatts)d.airconMaxWatts=AIRCON_MODEL_PROFILE.maxWatts;if(!d.airconCspf)d.airconCspf=AIRCON_MODEL_PROFILE.cspf;if(!d.airconDoeMonthlyKwh)d.airconDoeMonthlyKwh=AIRCON_MODEL_PROFILE.doeMonthlyKwh;
-  if(!d.weatherProvider)d.weatherProvider=DEFAULT_WEATHER.provider;if(!d.weatherLabel)d.weatherLabel=DEFAULT_WEATHER.label;if(!d.weatherLat)d.weatherLat=DEFAULT_WEATHER.lat;if(!d.weatherLon)d.weatherLon=DEFAULT_WEATHER.lon;if(!d.weatherElevation)d.weatherElevation=DEFAULT_WEATHER.elevation;
+if(!d.weatherProvider)d.weatherProvider=DEFAULT_WEATHER.provider;if(!d.weatherLabel)d.weatherLabel=DEFAULT_WEATHER.label;/* leave coords unset by default (privacy) */if(!d.weatherElevation)d.weatherElevation=DEFAULT_WEATHER.elevation;
   if(d.darkMode===undefined)d.darkMode=false;
   if(!d.theme)d.theme=d.darkMode?'dark':'light';
   if(!['light','dark','nebula'].includes(d.theme))d.theme=d.darkMode?'dark':'light';
@@ -3362,7 +3362,7 @@ function renderModal(){
     const g2=D('g2');
     const elFg=D('fg');elFg.appendChild(h('label',{cls:'fl'},'Elevation (m)'));const eli=Inp('',{type:'number',inputmode:'decimal',step:'0.1',value:f.weatherElevation});eli.oninput=e=>f.weatherElevation=e.target.value;elFg.appendChild(eli);g2.appendChild(elFg);
     const wkFg=D('fg');wkFg.appendChild(h('label',{cls:'fl'},'Weather API Key'));const wki=Inp('',{type:'password',placeholder:'Optional',value:f.weatherApiKey||''});wki.oninput=e=>f.weatherApiKey=e.target.value;wkFg.appendChild(wki);g2.appendChild(wkFg);c.appendChild(g2);
-    c.appendChild(h('p',{style:'font-size:11px;color:#8a7260;line-height:1.5;margin-bottom:10px'},'Default coordinates are 'Unset', Outdoor weather is fetched from Open-Meteo and saved with aircon sessions.'));
+    c.appendChild(h('p',{style:'font-size:11px;color:#8a7260;line-height:1.5;margin-bottom:10px'},'Outdoor weather is fetched from Open-Meteo and saved with aircon sessions.'));
     const pref=Btn('bgfull','Lists & Defaults',openListsDefaults);pref.style.marginBottom='10px';c.appendChild(pref);
     const rf=Btn('bg','Refresh Weather',()=>updateWeather(true));rf.style.flex='1.2';
     const ca=Btn('bg','Cancel',()=>set({modal:null}));ca.style.flex='1';
